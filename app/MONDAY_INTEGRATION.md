@@ -1,348 +1,596 @@
-# Monday.com Integration
+# Monday.com Integration Specification
 
-The application must support optional bidirectional integration with Monday.com.
+Monday.com is an optional external system.
 
-The scheduling platform must remain fully functional without Monday.com.
+The Scheduling Platform must also operate independently for organizations that do not use Monday.com.
 
-## Integration Model
+When Monday.com is connected, the integration must support bidirectional communication.
 
-Monday.com may:
+## Integration Direction
 
-- Send client information to the Scheduling Platform
-- Send eligibility information
-- Send service information
-- Send funding information
-- Send scheduling status information
-- Receive appointment information
-- Receive appointment dates
-- Receive appointment times
-- Receive Auditor assignments
-- Receive Contractor assignments
-- Receive job numbers
-- Receive scheduling status changes
-- Receive cancellation/rescheduling information
-- Receive completion information
+Information may flow:
 
-The integration must support both directions.
+Monday.com → Scheduling Platform
+
+Scheduling Platform → Monday.com
+
+The integration may support both directions simultaneously.
 
 ## Multiple Boards
 
 An organization may connect multiple Monday.com boards.
 
-Example:
+Examples may include:
 
 - Central Vetting
 - Central Jobs
 - Central Ineligible
-- Department-specific boards
-- Additional program boards
+- Additional organization-specific boards
 
-Each connection must be independently configurable.
+Each board connection must be independently configurable.
 
-## Board Mapping
+## Board Relationships
 
-Each connected board must have a configurable mapping between:
+Boards may have relationships such as:
 
-Monday.com columns
-and
-Scheduling Platform fields.
+- Connected items
+- Mirror columns
+- Linked records
+- Status-driven workflows
+- Automations
 
-The integration must not assume that all organizations use the same column names.
+The Scheduling Platform must understand the underlying relationships without assuming a single fixed board structure.
 
 ## Central Vetting
 
-For the initial agency implementation, the primary intake/vetting board is:
+The organization's Central Vetting board contains intake and eligibility information.
 
-`Central Vetting`
+The Scheduling Platform should be able to receive relevant information when a client/property reaches the appropriate scheduling stage.
 
-The Scheduling Platform should receive clients only after the configured Monday.com workflow determines that the client is ready for scheduling.
+Clients must not enter the Scheduling Platform scheduling database merely because they exist in Monday.com.
 
-Clients should not enter the active Scheduling Platform queue merely because they exist on the Central Vetting board.
+The client should enter the Scheduling Platform only after the appropriate Monday.com workflow moves the client into a scheduling zone.
 
-## Connection Status
+## Zone Trigger
 
-A configured Monday.com status or automation may indicate when a client/property becomes eligible to enter the Scheduling Platform.
+A configured Monday.com event may indicate that a client/property is ready for scheduling.
 
-When the configured condition is met:
+Example workflow:
 
-1. The integration retrieves the required information.
-2. The Scheduling Platform creates or updates the corresponding client/property record.
-3. The property is assigned to the appropriate scheduling zone.
-4. Eligible services are evaluated.
-5. The client becomes available to Schedulers.
+1. Intake completes initial vetting.
+2. Client moves to pending connection.
+3. Monday.com connections are established.
+4. Appropriate job statuses are established.
+5. Connection status triggers the Monday.com automation.
+6. Client is assigned to a geographic zone.
+7. The Scheduling Platform receives the qualifying event.
+8. The client/property is imported into the Scheduling Platform.
+9. Scheduling eligibility becomes active.
+10. The client becomes available to Schedulers.
 
-## Client Identity
+## Scheduling Entry Rule
 
-The integration must support clients who:
+The Scheduling Platform should not create an active scheduling record for clients who have not reached the configured scheduling-entry condition.
 
-- Have multiple properties
-- Move between properties
-- Appear at multiple residences
-- Have multiple units associated with a property
-- Share a landlord with other properties
+## Zone Changes
 
-A client must not be identified solely by address.
+If a client's zone changes in Monday.com, the Scheduling Platform should receive the change.
 
-A client may have multiple property relationships.
+The system should:
 
-A property must have its own persistent identifier.
+- Update the zone
+- Recalculate scheduling availability
+- Update Scheduler views
+- Recalculate geographic routing where appropriate
 
-Units must have their own persistent identifiers where appropriate.
+## Central Jobs
 
-## Property Identity
+The Central Jobs board contains job-level information.
 
-The system must support:
+Relevant information may include:
 
-- Single-family properties
-- Multi-unit properties
-- Apartments
-- Units
-- Lots
-- Mobile homes
-- Properties with multiple items in Monday.com
+- Job status
+- Assessment date
+- Auditor
+- Job number
+- Service
+- Additional service information
 
-The same property address may appear in multiple Monday.com items.
+The Scheduling Platform should be able to receive relevant job information from the Jobs board.
 
-The integration must not automatically merge those records simply because the addresses match.
+## Bidirectional Scheduling Updates
 
-## Multi-Unit Properties
+When a Scheduler creates or changes an appointment, the Scheduling Platform should update Monday.com.
 
-Each tenant/unit may have different eligibility.
+Examples:
 
-The integration must support:
+- Scheduling status
+- Assessment date
+- Auditor
+- Job number
+- Other configured scheduling fields
 
-- Property-level eligibility
-- Unit-level eligibility
-- Tenant-level eligibility
-- Funding available to individual units
-- Funding available because of property-level rules
-- Service-specific eligibility
+## Monday Status Columns
 
-## Fifty-Percent Rule
+The integration must support configurable status mappings.
 
-The integration must support organization-defined rules such as:
-
-If at least 50% of units are eligible, the property may qualify for specified services.
-
-The actual rule must be configurable.
-
-The Scheduling Platform should receive the resulting eligibility information rather than attempting to replace the agency's existing eligibility determination unless specifically configured to do so.
-
-## Service Statuses
-
-Monday.com may contain separate status fields for primary services.
-
-Initial examples include:
-
-- AMP job status
-- WX job status
-- ASHP job status
-- HS status
-
-The Scheduling Platform must not hard-code these names.
-
-Organizations must be able to map their own service status fields.
-
-## Scheduling Status
-
-The integration must support statuses such as:
+Examples:
 
 - Ready to Schedule
 - Scheduling
 - Scheduled
 - In Progress
 - Assessment Complete
+- Completed
 - Declined
 - Prior Work
 - Invoiced
-- Completed
-- Other configured statuses
+- Other organization-defined statuses
 
-A status change in Monday.com may trigger a corresponding Scheduling Platform state change.
+Status values must not be hard-coded.
 
-## Scheduling Platform → Monday.com
+## Multiple Service Statuses
 
-When a Scheduler or client creates an appointment, the integration should update the associated Monday.com record.
-
-Potential fields include:
-
-- Appointment date
-- Appointment time
-- Auditor
-- Contractor
-- Scheduling status
-- Service
-- Job number
-- Scheduling notes where authorized
-
-## Monday.com → Scheduling Platform
-
-When an authorized Monday.com user changes relevant information, the Scheduling Platform should update accordingly.
+A client/property may have separate status fields for multiple primary services.
 
 Examples:
 
-- Client becomes ineligible
-- Service becomes ineligible
-- Service becomes eligible
-- Prior work is discovered
-- Job is cancelled
-- Job is completed
-- New service becomes available
-- Client is moved to another workflow state
+- AMP Job Status
+- WX Job Status
+- ASHP Job Status
+- HS Status
 
-## Mirrored Columns
+The integration must treat these as separate service-specific statuses.
 
-Monday.com mirror columns must be handled carefully.
+## Service-Specific Scheduling
 
-The integration should understand that a value displayed through a Mirror column may originate from another item/board.
+Schedulers primarily schedule the organization's four main services.
 
-The system should identify the underlying source record when possible.
+Other services may exist as:
 
-The integration must not create duplicate records simply because the same information appears through multiple Mirror columns.
+- Add-on services
+- Services identified during assessment
+- Services that are occasionally scheduled independently
 
-## Connected Boards
+The integration must support both.
 
-Monday.com Connected Boards may represent relationships between:
+## Add-On Services
 
-- Vetting
-- Jobs
-- Intake
-- Other program boards
+Additional services may be managed primarily on the Jobs board.
 
-The integration must preserve these relationships.
+Their eligibility may be determined through Monday.com automation and available funding.
 
-## Source of Truth
+The Scheduling Platform should receive relevant eligibility information when configured.
 
-Each synchronized field must have a configured authority.
+## Dynamic Services
 
-Possible settings:
+Service availability must be dynamic.
 
-- Monday.com
-- Scheduling Platform
-- Bidirectional
-- External/manual
+A client/property may have:
 
-The system must not assume that Monday.com is always authoritative.
+- Multiple eligible services
+- Different funding sources
+- Different service eligibility by unit
+- Services that are property-level
+- Services that are unit-level
+- Services that become available after assessment
 
-## Conflict Resolution
+## Funding
 
-If both systems change the same field before synchronization completes, the integration must use a defined conflict rule.
+Monday.com may contain multiple funding-source fields.
 
-Possible rules include:
+The Scheduling Platform must support receiving:
 
-- Most recent authorized change
-- Monday.com wins
-- Scheduling Platform wins
-- Manual review required
+- Primary funder
+- Secondary funder
+- Multiple funding sources
+- Available funding combinations
 
-The conflict rule must be configurable.
+Available funding is not necessarily the same as the funding ultimately selected for a service.
 
-## Synchronization Frequency
+The Auditor may determine how funding is ultimately used.
 
-The integration should support:
+## Multi-Unit Properties
 
-- Real-time webhook/event synchronization when available
-- Scheduled synchronization
-- Manual synchronization
+A multi-unit property may have multiple Monday.com items.
 
-Real-time synchronization should be preferred for scheduling-critical fields.
+Example:
 
-## Webhooks
+48 Oak Street, Apartments 1–4
 
-Where supported, Monday.com webhooks should be used to detect relevant changes.
+Each unit may have its own:
 
-Webhook events must be validated before being processed.
+- Eligibility
+- Service status
+- Funding availability
+- Job number
+- Service history
 
-## API
+The Scheduling Platform must preserve these distinctions.
 
-The integration must use the official Monday.com API.
+## Property-Level Rules
 
-API credentials must never be stored in source code.
+Some services are determined at the property level.
 
-Credentials must be stored using secure secret-management mechanisms.
+Example:
 
-## Error Handling
+Weatherization may require the building to meet a property-level service-history rule.
 
-If synchronization fails:
+The Scheduling Platform must support property-level eligibility independently of individual unit eligibility.
 
-1. The failure must be recorded.
-2. The affected record must remain identifiable.
-3. The system must avoid silently losing data.
-4. Retry logic should be used where appropriate.
-5. A user-visible integration error should be available to authorized administrators.
-6. Repeated failures should generate an alert.
+## Fifty-Percent Rule
 
-## Duplicate Prevention
+The organization may use a rule where a multi-unit property becomes eligible when at least 50% of units meet the required eligibility conditions.
 
-The integration must use stable external identifiers.
+The Scheduling Platform must support receiving and displaying the result of this rule from Monday.com.
 
-A Monday.com item ID should be stored with the corresponding Scheduling Platform record.
+The Scheduling Platform should not silently replace the organization's Monday.com eligibility determination.
 
-The same Monday.com item must not create duplicate clients, properties, or appointments.
+## Prior Work
+
+Monday.com may indicate that a service is unavailable because the client or property received the service previously.
+
+Examples:
+
+- Prior AMP within five years
+- Prior WX
+- Prior work
+- Invoiced FY25
+
+The Scheduling Platform should receive these statuses when they affect scheduling eligibility.
 
 ## Job Numbers
 
-The system must support custom job numbers.
+Each service may have its own job number.
 
 Job numbers may be:
 
 - Numeric
 - Alphanumeric
-- Organization-defined
+- Custom
 
-Bundled services must still retain separate job numbers.
+Examples:
 
-Example:
+- AMP job number
+- WX job number
+- ASHP job number
+- HS job number
 
-Client appointment:
+Job numbers must synchronize in both directions when configured.
 
-AMP + ASHP
+## Job Number Integrity
 
-May contain:
+The Scheduling Platform must not silently overwrite an existing job number.
 
-AMP Job Number: AMP-26-00123
-ASHP Job Number: ASHP-26-00451
+Conflicts should be flagged for review.
 
-These values must be synchronized according to configured mappings.
+## Mirrored Columns
 
-## Appointment Updates
+Monday.com may use mirrored columns between boards.
 
-When an appointment is:
+The integration must understand that a value may appear:
 
-- Created
-- Rescheduled
-- Cancelled
-- Completed
-- Partially completed
+- On the source board
+- On a mirror column
+- On a connected item
 
-the appropriate Monday.com fields should be updated.
+The integration should identify the underlying source where possible.
 
-## External State Changes
+## Mirror Synchronization
 
-If Monday.com changes a client to an ineligible or closed state, the Scheduling Platform must reevaluate the client's scheduling status.
+When a Scheduler changes a field in the Scheduling Platform, the integration should update the appropriate Monday.com source field rather than attempting to write blindly to a mirror field.
 
-If no active services remain, the client may be removed from the active scheduling queue according to the configured scheduling rules.
+Where Monday.com permits writing through the relevant connected structure, that method may be used.
 
-## Do Not Delete Automatically
+## Scheduler-Facing Fields
 
-External synchronization should not automatically delete Scheduling Platform records merely because a Monday.com item was removed.
+The Scheduling Platform should receive the fields necessary for scheduling.
 
-Deletion behavior must be explicitly configured.
+Examples:
 
-Historical scheduling information must be preserved.
+- Client name
+- Client phone
+- Client email
+- Property address
+- Unit
+- Landlord information when necessary
+- Funding availability
+- Service status
+- Priority score
+- Service history
+- Job number
+- Assessment dates
+- Auditor assignments
 
-## Synchronization Log
+## Priority
 
-Every synchronization event must be included in the Audit Log.
+Priority score is used for Scheduler sorting.
 
-The log should identify:
+The Scheduling Platform should receive the priority score where configured.
 
-- Direction
+Scheduler sorting may use:
+
+1. Priority score
+2. Time waiting for services
+3. Landlord last name for multi-unit properties
+
+Sorting rules must be configurable.
+
+## Scheduling Views
+
+The Scheduling Platform should replicate the operational concept of Monday.com filtered views.
+
+Schedulers should be able to see clients based on:
+
+- Service eligibility
+- Zone
+- Unit count
+- Property type
+- Scheduling status
+- Priority
+- Other configured criteria
+
+The Scheduling Platform should not require Schedulers to manually reproduce complex Monday.com filters.
+
+## Property vs Selected Unit Scheduling
+
+The Scheduler must be able to choose:
+
+- Entire property
+- Selected units
+- Single unit
+
+This selection must be stored in the Scheduling Platform.
+
+The selection should be communicated to Monday.com where configured.
+
+## Auditor Information
+
+The Scheduling Platform should synchronize Auditor assignments.
+
+Examples:
+
+- AMP Auditor
+- WX Auditor
+- ASHP Auditor
+- HS Auditor
+
+Assignments may be updated from the Scheduling Platform or Monday.com depending on configured authority.
+
+## Assessment Dates
+
+Assessment dates should synchronize.
+
+Examples:
+
+- AMP Assessment Date
+- WX Assessment Date
+- ASHP Assessment Date
+- HS Assessment Date
+
+## Cancellation and Rescheduling
+
+When a client cancels or reschedules through the Scheduling Platform:
+
+1. Appointment status updates.
+2. Monday.com receives the configured status change.
+3. Assessment dates are updated where appropriate.
+4. Auditor information remains or is changed according to workflow.
+5. Scheduler alerts are generated.
+6. The event is recorded in the Audit Log.
+
+## Auditor Alerts
+
+Auditor actions such as:
+
+- Running late
+- On My Way
+- Cancel
+- Cannot Attend
+- No-Show
+
+should generate Scheduler notifications.
+
+Monday.com may also be updated when configured.
+
+## Client Interest
+
+If an Auditor records interest in an additional eligible service:
+
+- The Scheduling Platform records the interest.
+- The Scheduler receives an alert.
+- Monday.com may be updated where configured.
+- The client remains available for follow-up until the organization resolves the request.
+
+## Completion and Archiving
+
+A client/property should not automatically disappear from Scheduling merely because an appointment is complete.
+
+The Scheduling Platform should hide/archive scheduling work only when configured conditions are satisfied.
+
+Examples:
+
+- Requested services completed
+- Remaining eligible services declined
+- No remaining schedulable services
+
+Completion information may originate from:
+
+- Scheduling Platform
+- Monday.com
+
+## Ineligibility
+
+If Monday.com determines that a client/property is no longer eligible:
+
+- Scheduling Platform scheduling availability should be updated.
+- Existing appointments must be handled according to configured rules.
+- The client should not be available for new scheduling.
+- The Central Ineligible workflow may be reflected in the Scheduling Platform.
+
+The system must not automatically cancel an appointment unless the organization's configured rule requires it.
+
+## Monday Automations
+
+Existing Monday.com automations should be allowed to continue operating.
+
+The Scheduling Platform should integrate with those workflows rather than unnecessarily replacing them.
+
+## Source of Truth
+
+Each field must have a configurable authority.
+
+Possible authority:
+
+- Monday.com
+- Scheduling Platform
+- Shared
+- Manual review
+
+The system must not assume that every field has the same source of truth.
+
+## Conflict Resolution
+
+If both systems change the same field:
+
+1. Detect the conflict.
+2. Record both values.
+3. Apply the configured conflict rule.
+4. Notify an authorized user when manual review is required.
+5. Record the resolution in the Audit Log.
+
+## Synchronization Queue
+
+Changes should pass through a synchronization queue where appropriate.
+
+The queue should support:
+
+- Retry
+- Failure tracking
+- Duplicate prevention
+- Ordering where required
+- Manual retry
+- Error reporting
+
+## Synchronization Frequency
+
+The integration should use event-driven synchronization whenever supported.
+
+Monday.com webhooks should be used for near-real-time updates where practical.
+
+When polling is required, the default polling interval should be:
+
+**30 seconds**
+
+The polling interval must be configurable by organization and integration.
+
+The system should support:
+
+- 30-second default polling
+- Longer intervals when appropriate
+- Manual "Sync Now"
+- Automatic retry
+- Exponential backoff after repeated failures
+- Rate-limit protection
+
+Polling must not create duplicate records or duplicate updates.
+
+The system should prioritize webhooks over polling when both are available.
+
+## Sync Freshness
+
+The system should track the last successful synchronization time for each integration.
+
+Authorized users should be able to see:
+
+- Last successful sync
+- Last attempted sync
+- Current synchronization status
+- Pending changes
+- Failed changes
+- Number of retry attempts
+
+## Synchronization History
+
+The system must preserve synchronization history.
+
+History should include:
+
 - Board
-- Item ID
+- Item
 - Field
+- Direction
 - Previous value
 - New value
 - Timestamp
-- Success/failure
-- Error information where applicable
+- Result
+- Error if applicable
+
+## Integration Failure
+
+A temporary Monday.com outage should not prevent Schedulers from using the internal Scheduling Platform.
+
+Changes should queue and synchronize when Monday.com becomes available again.
+
+## Reconciliation
+
+Authorized users should have a reconciliation screen showing:
+
+- Records synchronized successfully
+- Records pending synchronization
+- Failed records
+- Conflicts
+- Records requiring manual review
+
+## External IDs
+
+The integration must preserve stable Monday.com identifiers.
+
+Internal records must not rely solely on:
+
+- Item name
+- Client name
+- Address
+
+## Multiple Properties Per Client
+
+A client may have multiple properties.
+
+The integration must preserve the relationship between:
+
+- Client
+- Property
+- Unit
+- Monday item
+- Service
+- Job number
+
+A client moving to a new property must not cause historical records from the prior property to be overwritten.
+
+## Landlords Across Properties
+
+The same landlord may be associated with multiple properties.
+
+The integration should preserve the landlord/property relationship independently.
+
+## Integration Configuration
+
+Authorized administrators should be able to configure:
+
+- Board IDs
+- Group IDs
+- Column mappings
+- Status mappings
+- Service mappings
+- Field authority
+- Webhooks
+- Synchronization rules
+- Conflict rules
+- Scheduling-entry triggers
+- Polling frequency
+
+## Future Integrations
+
+The integration architecture should allow other platforms to be connected using the same general model.
+
+Monday.com must be an integration, not a dependency of the core Scheduling Engine.

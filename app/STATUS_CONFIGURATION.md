@@ -28,14 +28,24 @@ Organizations may configure which statuses can follow another status. Transition
 
 The framework intentionally does not assume a universal lifecycle such as "new → scheduled → completed". Different organizations and entity types can define their own valid states.
 
+## Lifecycle enforcement
+
+The generic status lifecycle service consumes these configured transitions. A domain record can request a status change through the lifecycle service, which verifies the configured transition before updating the record.
+
+The lifecycle service is domain-neutral and uses an injected record store/repository boundary. It does not replace domain models or define domain-specific workflows.
+
 ## Security
 
 All configuration operations require a trusted principal. The default authorization policy requires the principal's organization to match the target organization and the corresponding status permission.
 
+Lifecycle reads and transitions likewise require a trusted principal and the applicable status permission.
+
 ## Audit
 
-Creation and transition configuration changes create audit events using the trusted principal identity.
+Status configuration changes create audit events using the trusted principal identity. Successful domain status transitions also create audit events containing the previous status, new status, actor, and optional reason/metadata.
 
 ## Current scope
 
-This is the configuration foundation. It does not yet mutate domain records or enforce every lifecycle transition at the domain-service layer. Domain services should consume this configuration rather than embedding status rules.
+The configuration and lifecycle foundations are implemented independently of database technology. Persistent domain repositories and domain-specific services will adopt the lifecycle service as those integrations are implemented.
+
+The platform should continue to keep status rules in configuration rather than embedding organization-specific lifecycle behavior in domain code.

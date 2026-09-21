@@ -86,7 +86,7 @@ assert.throws(() => service.setTransitions({
 assert.equal(service.listStatuses({ principal: admin, entityType: "job" }).length, 3);
 assert.equal(service.auditStore.length, 4);
 
-assert.throws(() => service.listStatuses({ principal: otherOrg, entityType: "job" }), /Not authorized/);
+assert.equal(service.listStatuses({ principal: otherOrg, entityType: "job" }).length, 0);
 assert.throws(() => service.createStatus({
   principal: otherOrg,
   id: "foreign",

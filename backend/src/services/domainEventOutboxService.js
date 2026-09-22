@@ -24,8 +24,8 @@ class DomainEventOutboxService {
     if (event.organizationId !== principal.organizationId) throw new Error("Not authorized");
     this.#authorize(principal, ACTIONS.ENQUEUE, principal.organizationId);
 
-    if (this.outboxStore.some(entry => entry.eventId === event.id)) {
-      throw new Error("Domain event is already queued");
+    if (this.outboxStore.some(entry => entry.eventId === event.id || entry.id === id)) {
+      throw new Error("Domain event or outbox entry is already queued");
     }
 
     const entry = new DomainEventOutboxEntry({

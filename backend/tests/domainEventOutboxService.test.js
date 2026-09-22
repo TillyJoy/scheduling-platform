@@ -100,9 +100,11 @@ const otherOrg = {
   permissions: ["event:dispatch"]
 };
 
-assert.throws(
-  () => service.listPending({ principal: otherOrg }),
-  /Not authorized/
+// A dispatcher in another organization may access its own tenant's queue,
+// but must not see entries belonging to org-a.
+assert.deepEqual(
+  service.listPending({ principal: otherOrg }),
+  []
 );
 
 assert.throws(

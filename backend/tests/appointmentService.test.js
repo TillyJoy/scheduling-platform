@@ -39,7 +39,7 @@ service.create({
 });
 
 assert.equal(service.list({ principal }).length, 2);
-assert.throws(() => service.list({ principal: otherOrg }), /Not authorized/);
+assert.throws(() => service.get({ principal: otherOrg, appointmentId: "a1" }), /Not authorized/);
 assert.throws(() => service.create({
   principal,
   id: "a4",

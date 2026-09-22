@@ -1,5 +1,21 @@
 const STATUSES = Object.freeze(["pending", "processing", "published", "failed"]);
 
+function deepFreezeClone(value) {
+  if (Array.isArray(value)) {
+    const clone = value.map(deepFreezeClone);
+    return Object.freeze(clone);
+  }
+
+  if (value && typeof value === "object") {
+    const clone = Object.fromEntries(
+      Object.entries(value).map(([key, child]) => [key, deepFreezeClone(child)])
+    );
+    return Object.freeze(clone);
+  }
+
+  return value;
+}
+
 class DomainEventOutboxEntry {
   constructor({
     id,
@@ -36,7 +52,7 @@ class DomainEventOutboxEntry {
     this.eventType = eventType;
     this.entityType = entityType;
     this.entityId = entityId;
-    this.payload = Object.freeze({ ...payload });
+    this.payload = deepFreezeClone(payload);
     this.source = source;
     this.occurredAt = occurredAt;
     this.availableAt = availableAt;

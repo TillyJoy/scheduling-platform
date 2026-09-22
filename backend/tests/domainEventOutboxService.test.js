@@ -21,7 +21,12 @@ const event = new DomainEvent({
   payload: { previousStatus: "new", newStatus: "ready" }
 });
 
-const entry = service.enqueue({ principal, event, id: "outbox-1" });
+const entry = service.enqueue({
+  principal,
+  event,
+  id: "outbox-1",
+  availableAt: new Date("2026-01-01T00:00:00Z")
+});
 assert.equal(entry.eventId, "event-1");
 assert.equal(entry.status, "pending");
 assert.equal(entry.organizationId, "org-a");

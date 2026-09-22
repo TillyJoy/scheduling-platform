@@ -107,7 +107,7 @@ class NotificationEventProcessor {
       ...event.payload
     };
 
-    const render = value => String(value).replace(/{{\\s*([A-Za-z0-9_.-]+)\\s*}}/g, (match, name) => {
+    const render = value => String(value).replace(/{{\s*([A-Za-z0-9_.-]+)\s*}}/g, (match, name) => {
       if (!variables.has(name)) return match;
       const resolved = NotificationEventProcessor.getPath(context, name);
       return resolved === undefined || resolved === null ? "" : String(resolved);

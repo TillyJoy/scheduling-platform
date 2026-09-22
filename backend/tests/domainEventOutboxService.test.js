@@ -60,7 +60,7 @@ const claimed = service.claimBatch({
 assert.equal(claimed.length, 1);
 assert.equal(claimed[0].status, "processing");
 assert.equal(claimed[0].attempts, 1);
-
+ 
 service.markFailed({
   principal,
   outboxId: "outbox-1",
@@ -93,6 +93,17 @@ service.markPublished({
 assert.equal(entry.status, "published");
 assert.equal(entry.lockedAt, null);
 assert.equal(entry.lastError, null);
+
+const sameOrgNoDispatch = {
+  userId: "worker-a-no-dispatch",
+  organizationId: "org-a",
+  permissions: ["event:emit"]
+};
+
+assert.throws(
+  () => service.markPublished({ principal: sameOrgNoDispatch, outboxId: "outbox-1" }),
+  /Not authorized/
+);
 
 const otherOrg = {
   userId: "worker-b",

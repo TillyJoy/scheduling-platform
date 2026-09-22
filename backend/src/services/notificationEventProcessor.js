@@ -35,6 +35,8 @@ class NotificationEventProcessor {
     const results = [];
     for (const rule of rules) {
       const recipients = this.#resolveRecipients(rule, event);
+      if (recipients.length === 0) throw new Error("No recipientId could be resolved for notification rule");
+
       const templates = rule.templateIds
         .map(id => this.templateStore.get(id))
         .filter(template => template && template.organizationId === event.organizationId && template.status === "published");

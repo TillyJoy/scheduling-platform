@@ -28,6 +28,10 @@ Every successful transition creates an `AuditEvent` containing the trusted actor
 
 The service uses an injected record store so lifecycle behavior can be tested independently of database technology. It does not replace individual domain models or repositories yet.
 
-## Next integration
+## Domain event integration
 
-A successful transition can become a generic domain event for the notification system. Notification rules can then react to status changes without embedding notification logic into domain services.
+When a domain event service is supplied, a successful transition emits a generic status-change event before the record mutation is committed by the injected record store. The default event type is derived from the runtime entity type using the pattern `<entityType>.status.changed`, and callers may supply another configured event type.
+
+The event contains the previous status, new status, reason, and metadata. The lifecycle service does not invoke notification rules directly.
+
+The current in-memory foundation cannot provide transactional guarantees across the record store and event store. Persistent production integration should use a transactionally reliable outbox/event boundary so a committed state change and its event cannot diverge.

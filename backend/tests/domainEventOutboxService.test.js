@@ -37,6 +37,21 @@ assert.throws(
   /already queued/
 );
 
+assert.throws(
+  () => service.enqueue({
+    principal,
+    event: new DomainEvent({
+      id: "event-duplicate-outbox-id",
+      organizationId: "org-a",
+      eventType: "job.updated",
+      entityType: "job",
+      entityId: "job-2"
+    }),
+    id: "outbox-1"
+  }),
+  /already queued/
+);
+
 const claimed = service.claimBatch({
   principal,
   limit: 1,
@@ -88,6 +103,11 @@ const otherOrg = {
 assert.throws(
   () => service.listPending({ principal: otherOrg }),
   /Not authorized/
+);
+
+assert.throws(
+  () => service.markPublished({ principal: otherOrg, outboxId: "outbox-1" }),
+  /Outbox entry not found/
 );
 
 assert.throws(

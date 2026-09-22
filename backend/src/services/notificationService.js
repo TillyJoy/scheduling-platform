@@ -40,6 +40,7 @@ class NotificationService {
   static defaultAuthorize(principal, action, { organizationId, recipientId }) {
     if (principal.organizationId !== organizationId) return false;
     if (!Array.isArray(principal.permissions) || !principal.permissions.includes(action)) return false;
+    if (action === ACTIONS.CREATE && principal.permissions.includes("notification:dispatch")) return true;
     return principal.permissions.includes("notification:manage") || principal.userId === recipientId;
   }
 }

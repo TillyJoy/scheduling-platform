@@ -8,7 +8,7 @@ const { NotificationRule } = require("../src/models/notificationRule");
 const principal = {
   userId: "dispatcher-a",
   organizationId: "org-a",
-  permissions: ["notification:dispatch", "notification:create", "notification:read"]
+  permissions: ["notification:dispatch", "notification:read"]
 };
 
 const notificationStore = new Map();

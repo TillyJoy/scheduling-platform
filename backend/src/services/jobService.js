@@ -10,17 +10,22 @@ class JobService {
     this.#requirePrincipal(principal);
     const job = new Job(input);
     this.#authorize(principal, "job:create", job.organizationId);
-    if (this.jobStore.has(job.id)) throw new Error("Job ID already exists");
-    this.jobStore.set(job.id, job);
+    const key = JobService.storageKey(job.organizationId, job.id);
+    if (this.jobStore.has(key)) throw new Error("Job ID already exists");
+    this.jobStore.set(key, job);
     return job;
   }
 
   get({ principal, jobId }) {
     this.#requirePrincipal(principal);
-    const job = this.jobStore.get(jobId);
+    const job = this.jobStore.get(JobService.storageKey(principal.organizationId, jobId));
     if (!job) throw new Error("Job not found");
     this.#authorize(principal, "job:read", job.organizationId);
     return job;
+  }
+
+  getForOrganization({ organizationId, jobId }) {
+    return this.jobStore.get(JobService.storageKey(organizationId, jobId)) ?? null;
   }
 
   list({ principal } = {}) {
@@ -28,6 +33,10 @@ class JobService {
     this.#authorize(principal, "job:read", principal.organizationId);
     return [...this.jobStore.values()]
       .filter(job => job.organizationId === principal.organizationId);
+  }
+
+  static storageKey(organizationId, id) {
+    return JSON.stringify([organizationId, id]);
   }
 
   #authorize(principal, action, organizationId) {

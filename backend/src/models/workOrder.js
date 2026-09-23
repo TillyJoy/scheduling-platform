@@ -22,7 +22,7 @@ class WorkOrder {
     this.number = number;
     this.title = title;
     this.statusCode = statusCode;
-    this.metadata = { ...metadata };
+    this.metadata = structuredClone(metadata);
   }
 }
 

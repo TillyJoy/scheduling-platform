@@ -62,7 +62,8 @@ class SchedulingService {
     const overlaps = item => {
       const itemStart = new Date(item.startTime);
       const itemEnd = new Date(item.endTime);
-      const resourceIds = Array.isArray(item.resourceIds) ? item.resourceIds : [item.resourceId];\n      return resourceIds.includes(resourceId) && itemEnd > start && itemStart < end;
+      const resourceIds = Array.isArray(item.resourceIds) ? item.resourceIds : [item.resourceId];
+      return resourceIds.includes(resourceId) && itemEnd > start && itemStart < end;
     };
     if (this.assignments.some(overlaps)) return true;
     return this.holds.some(hold => hold.status === "active" && hold.expiresAt && new Date(hold.expiresAt) > new Date() && overlaps(hold));

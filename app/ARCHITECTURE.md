@@ -149,7 +149,11 @@ Each integration should be modular and replaceable.
 
 ## Monday.com
 
-Monday.com is an optional integration.
+Monday.com is an external integration and is not part of the core Scheduling Engine.
+
+**Current job MVP:** the Monday.com integration is a required deployment component because the existing business workflow depends on it. The integration must remain behind the Integration Layer so the core domain and scheduling engine do not depend on Monday-specific data structures.
+
+For other organizations, Monday.com may remain disconnected; standalone operation is a product capability, not a reason to couple the core architecture to Monday.com.
 
 When connected, it may provide:
 

@@ -66,7 +66,7 @@ assert.equal(service.get({ principal, appointmentId: "hold-1" }).id, "hold-1");
 
 assert.throws(() => service.get({ principal: otherOrg, appointmentId: "hold-1" }), /Appointment not found/);
 
-const cancelled = service.createHold({
+service.createHold({
   principal,
   id: "hold-3",
   organizationId: "org-a",
@@ -80,12 +80,13 @@ const cancelled = service.createHold({
 });
 assert.equal(service.cancelHold({ principal, holdId: "hold-3" }).status, "cancelled");
 
+let now = new Date("2026-10-01T08:00:00Z");
 const expiringService = new AppointmentService({
   schedulingService: new SchedulingService({
     resources: [{ id: "resource-1", qualifications: ["service-a"], active: true }],
     availabilities: [{ resourceId: "resource-1", startTime: "2026-10-01T09:00:00Z", endTime: "2026-10-01T10:00:00Z" }]
   }),
-  clock: () => new Date("2026-10-01T08:30:00Z")
+  clock: () => now
 });
 expiringService.createHold({
   principal,
@@ -99,4 +100,5 @@ expiringService.createHold({
   endTime: "2026-10-01T10:00:00Z",
   expiresAt: "2026-10-01T08:15:00Z"
 });
+now = new Date("2026-10-01T08:30:00Z");
 assert.throws(() => expiringService.confirmHold({ principal, holdId: "hold-4" }), /no longer active/);

@@ -33,7 +33,7 @@ class Assignment {
     this.startTime = start;
     this.endTime = end;
     this.statusCode = statusCode;
-    this.metadata = { ...metadata };
+    this.metadata = structuredClone(metadata);
   }
 }
 

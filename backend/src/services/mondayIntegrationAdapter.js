@@ -38,6 +38,34 @@ class MondayIntegrationAdapter {
       const mapping = board.columns?.[internalField];
       if (!mapping) continue;
 
+      if (this.#isMirrorMapping(mapping)) {
+        if (!mapping.sourceColumnId) {
+          throw new Error(`No source column configured for mirror field ${internalField}`);
+        }
+        if (typeof this.client.resolveMirrorSource !== "function") {
+          throw new Error("Monday client cannot resolve mirror source");
+        }
+
+        const source = await this.client.resolveMirrorSource({
+          boardId: String(board.id),
+          itemId: String(itemId),
+          mirrorColumnId: String(mapping.columnId),
+          sourceColumnId: String(mapping.sourceColumnId)
+        });
+
+        if (!source?.boardId || !source?.itemId || !source?.columnId) {
+          throw new Error(`Monday mirror source could not be resolved for ${internalField}`);
+        }
+
+        writes.push({
+          boardId: String(source.boardId),
+          itemId: String(source.itemId),
+          columnId: String(source.columnId),
+          value
+        });
+        continue;
+      }
+
       const columnId = mapping.sourceColumnId || mapping.columnId;
       if (!columnId) throw new Error(`No writable Monday column configured for ${internalField}`);
 
@@ -60,8 +88,8 @@ class MondayIntegrationAdapter {
     this.#requireActive();
     const board = this.#board(boardKey);
     return this.client.getBoardItems({
-      boardId: String(board.id),
-      ...options
+      ...options,
+      boardId: String(board.id)
     });
   }
 
@@ -69,6 +97,10 @@ class MondayIntegrationAdapter {
     const board = this.configuration.boards?.[boardKey];
     if (!board?.id) throw new Error(`Monday board configuration not found: ${boardKey}`);
     return board;
+  }
+
+  #isMirrorMapping(mapping) {
+    return mapping?.type === "mirror" || mapping?.mirror === true;
   }
 
   #readColumn(item, mapping) {

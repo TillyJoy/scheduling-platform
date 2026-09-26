@@ -2,7 +2,9 @@
 
 Monday.com is an optional external system.
 
-The Scheduling Platform must also operate independently for organizations that do not use Monday.com.
+**Current job MVP:** Monday.com is a required integration for the initial deployment used by the existing business workflow. The platform must therefore ship with the Monday.com adapter and required Central Vetting/Central Jobs synchronization enabled for that deployment.
+
+This requirement does not make Monday.com part of the core scheduling domain or scheduling engine. The core platform remains capable of operating independently for organizations that do not use Monday.com.
 
 When Monday.com is connected, the integration must support bidirectional communication.
 

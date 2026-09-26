@@ -115,15 +115,15 @@ test("rejects inactive Monday integrations before reading or writing", async () 
   );
 });
 
-test("rejects missing board configuration", () => {
+test("rejects missing board configuration", async () => {
   const adapter = new MondayIntegrationAdapter({
     client: {},
     integration,
     configuration
   });
 
-  assert.throws(
-    () => adapter.readBoardItems({ boardKey: "missing" }),
+  await assert.rejects(
+    adapter.readBoardItems({ boardKey: "missing" }),
     /configuration not found/
   );
 });

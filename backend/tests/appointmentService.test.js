@@ -14,6 +14,7 @@ const otherOrg = {
 };
 
 const schedulingHolds = [];
+const appointmentStore = new Map();
 const schedulingService = new SchedulingService({
   resources: [{ id: "resource-1", qualifications: ["service-a"], active: true }],
   availabilities: [{
@@ -22,10 +23,12 @@ const schedulingService = new SchedulingService({
     endTime: "2026-10-01T12:00:00Z"
   }],
   assignments: [],
-  holds: schedulingHolds
+  holds: schedulingHolds,
+  appointments: appointmentStore
 });
 
 const service = new AppointmentService({
+  appointmentStore,
   schedulingService,
   schedulingHolds,
   clock: () => new Date("2026-10-01T08:00:00Z")
@@ -48,6 +51,19 @@ assert.equal(hold.status, "active");
 
 assert.throws(() => service.createHold({
   principal,
+  id: "hold-invalid",
+  organizationId: "org-a",
+  clientId: "client-invalid",
+  propertyId: "property-invalid",
+  memberIds: ["resource-1"],
+  serviceIds: ["service-a"],
+  startTime: "not-a-date",
+  endTime: "2026-10-01T10:30:00Z",
+  expiresAt: "2026-10-01T08:15:00Z"
+}), /endTime must be after startTime/);
+
+assert.throws(() => service.createHold({
+  principal,
   id: "hold-2",
   organizationId: "org-a",
   clientId: "client-2",
@@ -63,6 +79,19 @@ const appointment = service.confirmHold({ principal, holdId: "hold-1" });
 assert.equal(appointment.status, "scheduled");
 assert.equal(appointment.id, "hold-1");
 assert.equal(service.get({ principal, appointmentId: "hold-1" }).id, "hold-1");
+
+assert.throws(() => service.createHold({
+  principal,
+  id: "hold-overlap",
+  organizationId: "org-a",
+  clientId: "client-overlap",
+  propertyId: "property-overlap",
+  memberIds: ["resource-1"],
+  serviceIds: ["service-a"],
+  startTime: "2026-10-01T09:30:00Z",
+  endTime: "2026-10-01T10:30:00Z",
+  expiresAt: "2026-10-01T08:15:00Z"
+}), /no longer available/);
 
 assert.throws(() => service.get({ principal: otherOrg, appointmentId: "hold-1" }), /Appointment not found/);
 

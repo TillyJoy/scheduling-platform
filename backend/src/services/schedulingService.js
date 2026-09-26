@@ -1,12 +1,24 @@
 class SchedulingService {
-  constructor({ resources = [], availabilities = [], assignments = [], holds = [] } = {}) {
+  constructor({
+    resources = [],
+    availabilities = [],
+    assignments = [],
+    holds = [],
+    appointments = [],
+    statusResolver = null,
+    clock = () => new Date()
+  } = {}) {
     this.resources = resources;
     this.availabilities = availabilities;
     this.assignments = assignments;
     this.holds = holds;
+    this.appointments = appointments;
+    this.statusResolver = statusResolver;
+    this.clock = clock;
   }
 
   findAvailableSlots({
+    organizationId = null,
     resourceIds = null,
     serviceIds = [],
     startTime,
@@ -33,11 +45,18 @@ class SchedulingService {
       .filter(resource => resource.active !== false)
       .filter(resource => !allowedIds || allowedIds.has(resource.id))
       .filter(resource => this.#qualified(resource, serviceIds))
-      .flatMap(resource => this.#resourceSlots(resource, windowStart, windowEnd, durationMinutes, slotMinutes))
+      .flatMap(resource => this.#resourceSlots(
+        resource,
+        organizationId,
+        windowStart,
+        windowEnd,
+        durationMinutes,
+        slotMinutes
+      ))
       .sort((a, b) => a.startTime - b.startTime || a.resourceId.localeCompare(b.resourceId));
   }
 
-  #resourceSlots(resource, windowStart, windowEnd, durationMinutes, slotMinutes) {
+  #resourceSlots(resource, organizationId, windowStart, windowEnd, durationMinutes, slotMinutes) {
     const slots = [];
     const windows = this.availabilities
       .filter(availability => availability.resourceId === resource.id && availability.available !== false)
@@ -49,7 +68,7 @@ class SchedulingService {
       const latestStart = new Date(Math.min(availability.end.getTime(), windowEnd.getTime()) - durationMinutes * 60000);
       while (cursor <= latestStart) {
         const candidateEnd = new Date(cursor.getTime() + durationMinutes * 60000);
-        if (!this.#conflicts(resource.id, cursor, candidateEnd)) {
+        if (!this.#conflicts(resource.id, organizationId, cursor, candidateEnd)) {
           slots.push({ resourceId: resource.id, startTime: new Date(cursor), endTime: candidateEnd });
         }
         cursor = new Date(cursor.getTime() + slotMinutes * 60000);
@@ -58,15 +77,54 @@ class SchedulingService {
     return slots;
   }
 
-  #conflicts(resourceId, start, end) {
+  #conflicts(resourceId, organizationId, start, end) {
     const overlaps = item => {
+      if (organizationId !== null && item.organizationId !== organizationId) return false;
       const itemStart = new Date(item.startTime);
       const itemEnd = new Date(item.endTime);
       const resourceIds = Array.isArray(item.resourceIds) ? item.resourceIds : [item.resourceId];
       return resourceIds.includes(resourceId) && itemEnd > start && itemStart < end;
     };
-    if (this.assignments.some(overlaps)) return true;
-    return this.holds.some(hold => hold.status === "active" && hold.expiresAt && new Date(hold.expiresAt) > new Date() && overlaps(hold));
+
+    if (this.assignments.some(assignment => overlaps(assignment) && this.#consumesAssignment(assignment))) return true;
+    if (this.appointments.some(appointment => overlaps(appointment) && this.#consumesAppointment(appointment))) return true;
+
+    return this.holds.some(hold =>
+      this.#isActiveHold(hold) &&
+      hold.expiresAt &&
+      new Date(hold.expiresAt) > this.clock() &&
+      overlaps(hold)
+    );
+  }
+
+  #consumesAssignment(assignment) {
+    if (!assignment.statusCode || !this.statusResolver) return true;
+    const status = this.statusResolver({
+      organizationId: assignment.organizationId,
+      entityType: "assignment",
+      statusCode: assignment.statusCode
+    });
+    return !status || status.category !== "cancelled";
+  }
+
+  #consumesAppointment(appointment) {
+    if (!this.statusResolver) return appointment.status !== "cancelled";
+    const status = this.statusResolver({
+      organizationId: appointment.organizationId,
+      entityType: "appointment",
+      statusCode: appointment.status
+    });
+    return !status || status.category !== "cancelled";
+  }
+
+  #isActiveHold(hold) {
+    if (!this.statusResolver) return hold.status === "active";
+    const status = this.statusResolver({
+      organizationId: hold.organizationId,
+      entityType: "appointment_hold",
+      statusCode: hold.status
+    });
+    return Boolean(status && status.category === "active");
   }
 
   #qualified(resource, serviceIds) {

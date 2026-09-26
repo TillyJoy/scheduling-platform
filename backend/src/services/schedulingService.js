@@ -82,7 +82,11 @@ class SchedulingService {
       if (organizationId !== null && item.organizationId !== organizationId) return false;
       const itemStart = new Date(item.startTime);
       const itemEnd = new Date(item.endTime);
-      const resourceIds = Array.isArray(item.resourceIds) ? item.resourceIds : [item.resourceId];
+      const resourceIds = Array.isArray(item.resourceIds)
+        ? item.resourceIds
+        : Array.isArray(item.memberIds)
+          ? item.memberIds
+          : [item.resourceId];
       return resourceIds.includes(resourceId) && itemEnd > start && itemStart < end;
     };
 

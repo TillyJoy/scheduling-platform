@@ -86,15 +86,19 @@ class SchedulingService {
       return resourceIds.includes(resourceId) && itemEnd > start && itemStart < end;
     };
 
-    if (this.assignments.some(assignment => overlaps(assignment) && this.#consumesAssignment(assignment))) return true;
-    if (this.appointments.some(appointment => overlaps(appointment) && this.#consumesAppointment(appointment))) return true;
+    if (this.#values(this.assignments).some(assignment => overlaps(assignment) && this.#consumesAssignment(assignment))) return true;
+    if (this.#values(this.appointments).some(appointment => overlaps(appointment) && this.#consumesAppointment(appointment))) return true;
 
-    return this.holds.some(hold =>
+    return this.#values(this.holds).some(hold =>
       this.#isActiveHold(hold) &&
       hold.expiresAt &&
       new Date(hold.expiresAt) > this.clock() &&
       overlaps(hold)
     );
+  }
+
+  #values(source) {
+    return source instanceof Map ? [...source.values()] : source;
   }
 
   #consumesAssignment(assignment) {

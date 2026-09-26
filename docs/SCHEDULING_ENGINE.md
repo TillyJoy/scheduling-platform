@@ -735,3 +735,18 @@ AVAILABLE =
     AND no conflicting appointment
     AND no active hold
     AND organization rules satisfied
+
+
+# 46. Scheduling Conflict Sources
+
+The Scheduling Engine treats the following as scheduling conflict sources when they overlap a requested resource/time window:
+
+- Organization-scoped assignments that consume the resource
+- Confirmed/scheduled appointments that consume the resource
+- Active, unexpired scheduling holds
+
+Conflict sources must be evaluated within the requesting organization when an organization context is supplied. Cancelled or otherwise non-consuming records are excluded according to the organization's configured status semantics.
+
+The Scheduling Engine uses an injected clock for time-sensitive hold expiration so availability calculations remain deterministic and testable.
+
+Confirmed appointments remain authoritative scheduling commitments after their temporary hold changes state; confirmation must not make the underlying resource appear available again.

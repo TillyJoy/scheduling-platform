@@ -7,7 +7,8 @@ class AppointmentService {
     schedulingHolds = [],
     schedulingService = null,
     authorize = AppointmentService.defaultAuthorize,
-    clock = () => new Date()
+    clock = () => new Date(),
+    statusResolver = null
   } = {}) {
     this.appointmentStore = appointmentStore;
     this.holdStore = holdStore;
@@ -15,6 +16,7 @@ class AppointmentService {
     this.schedulingService = schedulingService;
     this.authorize = authorize;
     this.clock = clock;
+    this.statusResolver = statusResolver;
   }
 
   create({ principal, ...input }) {
@@ -50,6 +52,9 @@ class AppointmentService {
     const start = new Date(startTime);
     const end = new Date(endTime);
     const expiry = new Date(expiresAt);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
+      throw new Error("endTime must be after startTime");
+    }
     if (Number.isNaN(expiry.getTime()) || expiry <= this.clock()) {
       throw new Error("expiresAt must be in the future");
     }
@@ -63,6 +68,7 @@ class AppointmentService {
       for (const memberId of memberIds) {
         const durationMinutes = (end.getTime() - start.getTime()) / 60000;
         const slots = this.schedulingService.findAvailableSlots({
+          organizationId,
           resourceIds: [memberId],
           serviceIds,
           startTime: start,
@@ -166,7 +172,7 @@ class AppointmentService {
   #assertResourcesAvailable(candidate) {
     for (const existing of this.appointmentStore.values()) {
       if (existing.organizationId !== candidate.organizationId) continue;
-      if (existing.status === "cancelled") continue;
+      if (!this.#consumesAppointment(existing)) continue;
       if (existing.endTime <= candidate.startTime || existing.startTime >= candidate.endTime) continue;
       const conflict = candidate.memberIds.some(id => existing.memberIds.includes(id));
       if (conflict) throw new Error("Resource is already assigned to an overlapping appointment");
@@ -174,6 +180,16 @@ class AppointmentService {
         throw new Error("Team is already assigned to an overlapping appointment");
       }
     }
+  }
+
+  #consumesAppointment(appointment) {
+    if (!this.statusResolver) return appointment.status !== "cancelled";
+    const status = this.statusResolver({
+      organizationId: appointment.organizationId,
+      entityType: "appointment",
+      statusCode: appointment.status
+    });
+    return !status || status.category !== "cancelled";
   }
 
   #expireIfNeeded(hold) {

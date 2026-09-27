@@ -4,6 +4,7 @@ class Appointment {
     organizationId,
     clientId,
     propertyId,
+    workOrderId = null,
     unitIds = [],
     serviceIds = [],
     teamId = null,
@@ -16,6 +17,9 @@ class Appointment {
     if (!organizationId) throw new Error("organizationId is required");
     if (!clientId) throw new Error("clientId is required");
     if (!propertyId) throw new Error("propertyId is required");
+    if (!Array.isArray(unitIds)) throw new Error("unitIds must be an array");
+    if (!Array.isArray(serviceIds)) throw new Error("serviceIds must be an array");
+    if (!Array.isArray(memberIds)) throw new Error("memberIds must be an array");
     if (!startTime || !endTime) throw new Error("startTime and endTime are required");
 
     const start = new Date(startTime);
@@ -28,6 +32,7 @@ class Appointment {
     this.organizationId = organizationId;
     this.clientId = clientId;
     this.propertyId = propertyId;
+    this.workOrderId = workOrderId;
     this.unitIds = [...unitIds];
     this.serviceIds = [...serviceIds];
     this.teamId = teamId;

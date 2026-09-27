@@ -6,6 +6,7 @@ class AppointmentService {
     holdStore = new Map(),
     schedulingHolds = [],
     schedulingService = null,
+    durationService = null,
     authorize = AppointmentService.defaultAuthorize,
     clock = () => new Date(),
     statusResolver = null
@@ -14,6 +15,7 @@ class AppointmentService {
     this.holdStore = holdStore;
     this.schedulingHolds = schedulingHolds;
     this.schedulingService = schedulingService;
+    this.durationService = durationService;
     this.authorize = authorize;
     this.clock = clock;
     this.statusResolver = statusResolver;
@@ -21,7 +23,22 @@ class AppointmentService {
 
   create({ principal, ...input }) {
     this.#requirePrincipal(principal);
-    const appointment = new Appointment(input);
+
+    const appointmentInput = { ...input };
+    if (!appointmentInput.endTime) {
+      if (!this.durationService) throw new Error("endTime is required when duration service is unavailable");
+      const durationMinutes = this.durationService.calculate({
+        serviceIds: appointmentInput.serviceIds,
+        funderId: appointmentInput.funderId ?? null,
+        unitCount: appointmentInput.unitIds?.length ?? 0,
+        propertyType: appointmentInput.propertyType ?? null
+      });
+      const start = new Date(appointmentInput.startTime);
+      if (Number.isNaN(start.getTime())) throw new Error("startTime must be a valid date");
+      appointmentInput.endTime = new Date(start.getTime() + durationMinutes * 60000);
+    }
+
+    const appointment = new Appointment(appointmentInput);
     this.#authorize(principal, "appointment:create", appointment.organizationId);
     const key = this.#key(appointment.organizationId, appointment.id);
     if (this.appointmentStore.has(key)) throw new Error("Appointment ID already exists");

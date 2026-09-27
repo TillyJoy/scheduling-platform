@@ -90,14 +90,27 @@ class SchedulingService {
       return resourceIds.includes(resourceId) && itemEnd > start && itemStart < end;
     };
 
-    if (this.#values(this.assignments).some(assignment => overlaps(assignment) && this.#consumesAssignment(assignment))) return true;
-    if (this.#values(this.appointments).some(appointment => overlaps(appointment) && this.#consumesAppointment(appointment))) return true;
+    const teamOverlaps = item => {
+      if (organizationId !== null && item.organizationId !== organizationId) return false;
+      if (!item.teamId) return false;
+      const itemStart = new Date(item.startTime);
+      const itemEnd = new Date(item.endTime);
+      return itemEnd > start && itemStart < end;
+    };
+
+    if (this.#values(this.assignments).some(assignment =>
+      (overlaps(assignment) || teamOverlaps(assignment)) && this.#consumesAssignment(assignment)
+    )) return true;
+
+    if (this.#values(this.appointments).some(appointment =>
+      (overlaps(appointment) || teamOverlaps(appointment)) && this.#consumesAppointment(appointment)
+    )) return true;
 
     return this.#values(this.holds).some(hold =>
+      (overlaps(hold) || teamOverlaps(hold)) &&
       this.#isActiveHold(hold) &&
       hold.expiresAt &&
-      new Date(hold.expiresAt) > this.clock() &&
-      overlaps(hold)
+      new Date(hold.expiresAt) > this.clock()
     );
   }
 
@@ -132,7 +145,7 @@ class SchedulingService {
       entityType: "appointment_hold",
       statusCode: hold.status
     });
-    return Boolean(status && status.category === "active");
+    return !status || status.category === "active";
   }
 
   #qualified(resource, serviceIds) {

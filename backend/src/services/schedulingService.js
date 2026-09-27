@@ -92,32 +92,27 @@ class SchedulingService {
       return resourceIds.includes(resourceId) && itemEnd > start && itemStart < end;
     };
 
-    const teamOverlaps = item => {
-      if (organizationId !== null && item.organizationId !== organizationId) return false;
-      if (!item.teamId) return false;
-      const itemStart = new Date(item.startTime);
-      const itemEnd = new Date(item.endTime);
-      return itemEnd > start && itemStart < end;
-    };
-
     if (this.#values(this.assignments).some(assignment =>
-      (overlaps(assignment) || teamOverlaps(assignment)) && this.#consumesAssignment(assignment)
+      overlaps(assignment) && this.#consumesAssignment(assignment)
     )) return true;
 
     if (this.#values(this.appointments).some(appointment =>
-      (overlaps(appointment) || teamOverlaps(appointment)) && this.#consumesAppointment(appointment)
+      this.#consumesAppointment(appointment) &&
+      (
+        overlaps(appointment) ||
+        (teamId && appointment.teamId === teamId && this.#timeOverlaps(appointment, start, end))
+      )
     )) return true;
 
     return this.#values(this.holds).some(hold =>
-      (overlaps(hold) || teamOverlaps(hold)) &&
       this.#isActiveHold(hold) &&
       hold.expiresAt &&
-      new Date(hold.expiresAt) > this.clock()
+      new Date(hold.expiresAt) > this.clock() &&
+      overlaps(hold)
     );
   }
 
-  #overlaps(item, start, end, organizationId) {
-    if (organizationId !== null && item.organizationId !== organizationId) return false;
+  #timeOverlaps(item, start, end) {
     const itemStart = new Date(item.startTime);
     const itemEnd = new Date(item.endTime);
     return itemEnd > start && itemStart < end;

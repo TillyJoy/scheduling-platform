@@ -10,12 +10,12 @@ const principal = {
 
 const durationService = new DurationService({
   services: [
-    { id: "amp", durationMinutes: 90, active: true },
-    { id: "wx", durationMinutes: 60, active: true }
+    { organizationId: "org-a", id: "amp", durationMinutes: 90, active: true },
+    { organizationId: "org-a", id: "wx", durationMinutes: 60, active: true }
   ],
   rules: [
-    { serviceIds: ["amp", "wx"], durationMinutes: 120 },
-    { serviceIds: ["amp", "wx"], funderId: "funder-b", durationMinutes: 150 }
+    { organizationId: "org-a", serviceIds: ["amp", "wx"], durationMinutes: 120 },
+    { organizationId: "org-a", serviceIds: ["amp", "wx"], funderId: "funder-b", durationMinutes: 150 }
   ]
 });
 
@@ -65,7 +65,7 @@ assert.throws(
 
 const explicitEndService = new AppointmentService({
   durationService: new DurationService({
-    services: [{ id: "amp", durationMinutes: 90, active: true }]
+    services: [{ organizationId: "org-a", id: "amp", durationMinutes: 90, active: true }]
   })
 });
 

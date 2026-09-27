@@ -145,7 +145,9 @@ class SchedulingService {
 
   #isActiveHold(hold) {
     if (["cancelled", "confirmed", "expired"].includes(hold.status)) return false;
-    if (!this.statusResolver) return hold.status === "active";
+    if (!this.statusResolver) {
+      return hold.status !== "confirmed" && hold.status !== "expired";
+    }
     const status = this.statusResolver({
       organizationId: hold.organizationId,
       entityType: "appointment_hold",

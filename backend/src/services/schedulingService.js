@@ -21,6 +21,7 @@ class SchedulingService {
     organizationId = null,
     resourceIds = null,
     serviceIds = [],
+    teamId = null,
     startTime,
     endTime,
     durationMinutes,
@@ -51,12 +52,13 @@ class SchedulingService {
         windowStart,
         windowEnd,
         durationMinutes,
-        slotMinutes
+        slotMinutes,
+        teamId
       ))
       .sort((a, b) => a.startTime - b.startTime || a.resourceId.localeCompare(b.resourceId));
   }
 
-  #resourceSlots(resource, organizationId, windowStart, windowEnd, durationMinutes, slotMinutes) {
+  #resourceSlots(resource, organizationId, windowStart, windowEnd, durationMinutes, slotMinutes, teamId) {
     const slots = [];
     const windows = this.availabilities
       .filter(availability => availability.resourceId === resource.id && availability.available !== false)
@@ -68,7 +70,7 @@ class SchedulingService {
       const latestStart = new Date(Math.min(availability.end.getTime(), windowEnd.getTime()) - durationMinutes * 60000);
       while (cursor <= latestStart) {
         const candidateEnd = new Date(cursor.getTime() + durationMinutes * 60000);
-        if (!this.#conflicts(resource.id, organizationId, cursor, candidateEnd)) {
+        if (!this.#conflicts(resource.id, organizationId, cursor, candidateEnd, teamId)) {
           slots.push({ resourceId: resource.id, startTime: new Date(cursor), endTime: candidateEnd });
         }
         cursor = new Date(cursor.getTime() + slotMinutes * 60000);
@@ -77,7 +79,7 @@ class SchedulingService {
     return slots;
   }
 
-  #conflicts(resourceId, organizationId, start, end) {
+  #conflicts(resourceId, organizationId, start, end, teamId) {
     const overlaps = item => {
       if (organizationId !== null && item.organizationId !== organizationId) return false;
       const itemStart = new Date(item.startTime);
@@ -112,6 +114,13 @@ class SchedulingService {
       hold.expiresAt &&
       new Date(hold.expiresAt) > this.clock()
     );
+  }
+
+  #overlaps(item, start, end, organizationId) {
+    if (organizationId !== null && item.organizationId !== organizationId) return false;
+    const itemStart = new Date(item.startTime);
+    const itemEnd = new Date(item.endTime);
+    return itemEnd > start && itemStart < end;
   }
 
   #values(source) {

@@ -21,6 +21,7 @@ class SchedulingService {
     organizationId = null,
     resourceIds = null,
     serviceIds = [],
+    teamId = null,
     startTime,
     endTime,
     durationMinutes,
@@ -51,12 +52,13 @@ class SchedulingService {
         windowStart,
         windowEnd,
         durationMinutes,
-        slotMinutes
+        slotMinutes,
+        teamId
       ))
       .sort((a, b) => a.startTime - b.startTime || a.resourceId.localeCompare(b.resourceId));
   }
 
-  #resourceSlots(resource, organizationId, windowStart, windowEnd, durationMinutes, slotMinutes) {
+  #resourceSlots(resource, organizationId, windowStart, windowEnd, durationMinutes, slotMinutes, teamId) {
     const slots = [];
     const windows = this.availabilities
       .filter(availability => availability.resourceId === resource.id && availability.available !== false)
@@ -68,7 +70,7 @@ class SchedulingService {
       const latestStart = new Date(Math.min(availability.end.getTime(), windowEnd.getTime()) - durationMinutes * 60000);
       while (cursor <= latestStart) {
         const candidateEnd = new Date(cursor.getTime() + durationMinutes * 60000);
-        if (!this.#conflicts(resource.id, organizationId, cursor, candidateEnd)) {
+        if (!this.#conflicts(resource.id, organizationId, cursor, candidateEnd, teamId)) {
           slots.push({ resourceId: resource.id, startTime: new Date(cursor), endTime: candidateEnd });
         }
         cursor = new Date(cursor.getTime() + slotMinutes * 60000);
@@ -77,7 +79,7 @@ class SchedulingService {
     return slots;
   }
 
-  #conflicts(resourceId, organizationId, start, end) {
+  #conflicts(resourceId, organizationId, start, end, teamId) {
     const overlaps = item => {
       if (organizationId !== null && item.organizationId !== organizationId) return false;
       const itemStart = new Date(item.startTime);
@@ -90,8 +92,18 @@ class SchedulingService {
       return resourceIds.includes(resourceId) && itemEnd > start && itemStart < end;
     };
 
-    if (this.#values(this.assignments).some(assignment => overlaps(assignment) && this.#consumesAssignment(assignment))) return true;
-    if (this.#values(this.appointments).some(appointment => overlaps(appointment) && this.#consumesAppointment(appointment))) return true;
+    if (this.#values(this.assignments).some(assignment =>
+      overlaps(assignment) && this.#consumesAssignment(assignment)
+    )) return true;
+
+    if (this.#values(this.appointments).some(appointment =>
+      this.#consumesAppointment(appointment) &&
+      (
+        overlaps(appointment) ||
+        (organizationId === null && teamId && appointment.teamId === teamId && this.#timeOverlaps(appointment, start, end)) ||
+        (organizationId !== null && appointment.organizationId === organizationId && teamId && appointment.teamId === teamId && this.#timeOverlaps(appointment, start, end))
+      )
+    )) return true;
 
     return this.#values(this.holds).some(hold =>
       this.#isActiveHold(hold) &&
@@ -99,6 +111,12 @@ class SchedulingService {
       new Date(hold.expiresAt) > this.clock() &&
       overlaps(hold)
     );
+  }
+
+  #timeOverlaps(item, start, end) {
+    const itemStart = new Date(item.startTime);
+    const itemEnd = new Date(item.endTime);
+    return itemEnd > start && itemStart < end;
   }
 
   #values(source) {
@@ -126,13 +144,16 @@ class SchedulingService {
   }
 
   #isActiveHold(hold) {
-    if (!this.statusResolver) return hold.status === "active";
+    if (["cancelled", "confirmed", "expired"].includes(hold.status)) return false;
+    if (!this.statusResolver) {
+      return hold.status !== "confirmed" && hold.status !== "expired";
+    }
     const status = this.statusResolver({
       organizationId: hold.organizationId,
       entityType: "appointment_hold",
       statusCode: hold.status
     });
-    return Boolean(status && status.category === "active");
+    return !status || status.category !== "cancelled";
   }
 
   #qualified(resource, serviceIds) {

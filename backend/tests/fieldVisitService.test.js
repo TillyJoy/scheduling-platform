@@ -7,7 +7,7 @@ const { WorkOrderService } = require("../src/services/workOrderService");
 const principal = {
   userId: "user-a",
   organizationId: "org-a",
-  permissions: ["fieldVisit:create", "fieldVisit:read", "fieldVisit:update", "actualWork:create", "actualWork:read"]
+  permissions: ["fieldVisit:create", "fieldVisit:read", "fieldVisit:update", "actualWork:create", "actualWork:read", "workOrder:create"]
 };
 const otherOrg = {
   userId: "user-b",

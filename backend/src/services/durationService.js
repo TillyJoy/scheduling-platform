@@ -18,6 +18,14 @@ class DurationService {
     }
 
     const normalizedIds = [...new Set(serviceIds)].sort();
+    const serviceMap = new Map(this.services.map(service => [service.id, service]));
+    for (const serviceId of normalizedIds) {
+      const service = serviceMap.get(serviceId);
+      if (!service || service.active === false) {
+        throw new Error(`Service not found or inactive: ${serviceId}`);
+      }
+    }
+
     const matchingRules = this.rules
       .filter(rule => this.#matches(rule, normalizedIds, funderId, unitCount, propertyType))
       .sort((a, b) => this.#specificity(b) - this.#specificity(a));
@@ -25,11 +33,9 @@ class DurationService {
     const rule = matchingRules[0];
     if (rule) return rule.durationMinutes;
 
-    const serviceMap = new Map(this.services.map(service => [service.id, service]));
     let duration = 0;
     for (const serviceId of normalizedIds) {
       const service = serviceMap.get(serviceId);
-      if (!service || service.active === false) throw new Error(`Service not found or inactive: ${serviceId}`);
       if (!Number.isInteger(service.durationMinutes) || service.durationMinutes <= 0) {
         throw new Error(`Service duration is not configured: ${serviceId}`);
       }

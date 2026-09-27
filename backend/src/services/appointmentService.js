@@ -25,9 +25,11 @@ class AppointmentService {
     this.#requirePrincipal(principal);
 
     const appointmentInput = { ...input };
+    this.#authorize(principal, "appointment:create", appointmentInput.organizationId);
     if (!appointmentInput.endTime) {
       if (!this.durationService) throw new Error("endTime is required when duration service is unavailable");
       const durationMinutes = this.durationService.calculate({
+        organizationId: principal.organizationId,
         serviceIds: appointmentInput.serviceIds,
         funderId: appointmentInput.funderId ?? null,
         unitCount: appointmentInput.unitIds?.length ?? 0,
@@ -39,7 +41,6 @@ class AppointmentService {
     }
 
     const appointment = new Appointment(appointmentInput);
-    this.#authorize(principal, "appointment:create", appointment.organizationId);
     const key = this.#key(appointment.organizationId, appointment.id);
     if (this.appointmentStore.has(key)) throw new Error("Appointment ID already exists");
     this.#assertResourcesAvailable(appointment);

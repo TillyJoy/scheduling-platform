@@ -175,3 +175,32 @@ assert.equal(cancelledHoldService.findAvailableSlots({
   endTime: "2026-10-01T10:00:00Z",
   durationMinutes: 60
 }).length, 1);
+
+const pendingHoldStatusService = new SchedulingService({
+  resources: [{ id: "r8", qualifications: ["service-a"], active: true }],
+  availabilities: [{
+    resourceId: "r8",
+    startTime: "2026-10-01T09:00:00Z",
+    endTime: "2026-10-01T10:00:00Z"
+  }],
+  holds: [{
+    id: "hold-pending",
+    organizationId: "org-a",
+    resourceIds: ["r8"],
+    startTime: "2026-10-01T09:00:00Z",
+    endTime: "2026-10-01T10:00:00Z",
+    status: "pending",
+    expiresAt: "2026-10-01T09:30:00Z"
+  }],
+  statusResolver: () => ({ category: "pending" }),
+  clock: () => new Date("2026-10-01T09:00:00Z")
+});
+
+assert.equal(pendingHoldStatusService.findAvailableSlots({
+  organizationId: "org-a",
+  resourceIds: ["r8"],
+  serviceIds: ["service-a"],
+  startTime: "2026-10-01T09:00:00Z",
+  endTime: "2026-10-01T10:00:00Z",
+  durationMinutes: 60
+}).length, 0);

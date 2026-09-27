@@ -90,8 +90,8 @@ const linkedAppointment = service.create({
   workOrderId: "wo-1",
   memberIds: ["resource-1"],
   serviceIds: ["service-a"],
-  startTime: "2026-10-01T11:00:00Z",
-  endTime: "2026-10-01T12:00:00Z",
+  startTime: "2026-10-01T10:00:00Z",
+  endTime: "2026-10-01T11:00:00Z",
   status: "scheduled"
 });
 assert.equal(linkedAppointment.workOrderId, "wo-1");

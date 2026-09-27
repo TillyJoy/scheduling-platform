@@ -100,7 +100,8 @@ class SchedulingService {
       this.#consumesAppointment(appointment) &&
       (
         overlaps(appointment) ||
-        (teamId && appointment.teamId === teamId && this.#timeOverlaps(appointment, start, end))
+        (organizationId === null && teamId && appointment.teamId === teamId && this.#timeOverlaps(appointment, start, end)) ||
+        (organizationId !== null && appointment.organizationId === organizationId && teamId && appointment.teamId === teamId && this.#timeOverlaps(appointment, start, end))
       )
     )) return true;
 
@@ -143,6 +144,7 @@ class SchedulingService {
   }
 
   #isActiveHold(hold) {
+    if (hold.status === "cancelled") return false;
     if (!this.statusResolver) return hold.status === "active";
     const status = this.statusResolver({
       organizationId: hold.organizationId,

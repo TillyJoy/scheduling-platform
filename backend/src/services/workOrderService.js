@@ -39,6 +39,12 @@ class WorkOrderService {
     return this.#clone(workOrder);
   }
 
+  getForOrganization({ organizationId, workOrderId = null, jobId = null }) {
+    const id = workOrderId ?? jobId;
+    if (!id) return null;
+    return this.workOrderStore.get(WorkOrderService.storageKey(organizationId, id)) ?? null;
+  }
+
   get({ principal, workOrderId }) {
     this.#requirePrincipal(principal);
     const workOrder = this.workOrderStore.get(

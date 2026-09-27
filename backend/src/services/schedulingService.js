@@ -144,14 +144,14 @@ class SchedulingService {
   }
 
   #isActiveHold(hold) {
-    if (hold.status === "cancelled") return false;
+    if (["cancelled", "confirmed", "expired"].includes(hold.status)) return false;
     if (!this.statusResolver) return hold.status === "active";
     const status = this.statusResolver({
       organizationId: hold.organizationId,
       entityType: "appointment_hold",
       statusCode: hold.status
     });
-    return !status || status.category === "active";
+    return !status || status.category !== "cancelled";
   }
 
   #qualified(resource, serviceIds) {

@@ -57,9 +57,14 @@ assert.throws(() => service.findAvailableSlots({
   durationMinutes: 0
 }), /durationMinutes must be a positive integer/);
 
+
 const teamConflictService = new SchedulingService({
   resources: [{ id: "r4", qualifications: ["service-a"], active: true }],
-  availabilities: [{ resourceId: "r4", startTime: "2026-10-01T09:00:00Z", endTime: "2026-10-01T12:00:00Z" }],
+  availabilities: [{
+    resourceId: "r4",
+    startTime: "2026-10-01T09:00:00Z",
+    endTime: "2026-10-01T12:00:00Z"
+  }],
   appointments: [{
     id: "appointment-1",
     organizationId: "org-a",
@@ -70,10 +75,12 @@ const teamConflictService = new SchedulingService({
     status: "scheduled"
   }]
 });
+
 assert.deepEqual(teamConflictService.findAvailableSlots({
   organizationId: "org-a",
   resourceIds: ["r4"],
   serviceIds: ["service-a"],
+  teamId: "team-1",
   startTime: "2026-10-01T09:00:00Z",
   endTime: "2026-10-01T12:00:00Z",
   durationMinutes: 60,
@@ -85,7 +92,11 @@ assert.deepEqual(teamConflictService.findAvailableSlots({
 
 const unknownHoldStatusService = new SchedulingService({
   resources: [{ id: "r5", qualifications: ["service-a"], active: true }],
-  availabilities: [{ resourceId: "r5", startTime: "2026-10-01T09:00:00Z", endTime: "2026-10-01T10:00:00Z" }],
+  availabilities: [{
+    resourceId: "r5",
+    startTime: "2026-10-01T09:00:00Z",
+    endTime: "2026-10-01T10:00:00Z"
+  }],
   holds: [{
     id: "hold-unknown",
     organizationId: "org-a",
@@ -98,6 +109,7 @@ const unknownHoldStatusService = new SchedulingService({
   statusResolver: () => null,
   clock: () => new Date("2026-10-01T09:00:00Z")
 });
+
 assert.equal(unknownHoldStatusService.findAvailableSlots({
   organizationId: "org-a",
   resourceIds: ["r5"],
@@ -105,70 +117,4 @@ assert.equal(unknownHoldStatusService.findAvailableSlots({
   startTime: "2026-10-01T09:00:00Z",
   endTime: "2026-10-01T10:00:00Z",
   durationMinutes: 60
-}).length, 0);
-
-
-const teamConflictService = new SchedulingService({
-  resources: [{ id: "team-resource-1", qualifications: ["service-a"], active: true }],
-  availabilities: [{
-    resourceId: "team-resource-1",
-    startTime: "2026-10-01T09:00:00Z",
-    endTime: "2026-10-01T12:00:00Z"
-  }],
-  appointments: [{
-    id: "team-appointment-1",
-    organizationId: "org-a",
-    teamId: "team-1",
-    memberIds: ["other-resource"],
-    startTime: "2026-10-01T10:00:00Z",
-    endTime: "2026-10-01T11:00:00Z",
-    status: "scheduled"
-  }]
-});
-
-const teamConflictSlots = teamConflictService.findAvailableSlots({
-  organizationId: "org-a",
-  resourceIds: ["team-resource-1"],
-  serviceIds: ["service-a"],
-  teamId: "team-1",
-  startTime: "2026-10-01T09:00:00Z",
-  endTime: "2026-10-01T12:00:00Z",
-  durationMinutes: 60,
-  slotMinutes: 60
-});
-assert.deepEqual(teamConflictSlots.map(slot => slot.startTime.toISOString()), [
-  "2026-10-01T09:00:00.000Z",
-  "2026-10-01T11:00:00.000Z"
-]);
-
-const unknownHoldStatusService = new SchedulingService({
-  resources: [{ id: "hold-resource", qualifications: ["service-a"], active: true }],
-  availabilities: [{
-    resourceId: "hold-resource",
-    startTime: "2026-10-01T09:00:00Z",
-    endTime: "2026-10-01T11:00:00Z"
-  }],
-  holds: [{
-    id: "unknown-status-hold",
-    organizationId: "org-a",
-    resourceIds: ["hold-resource"],
-    startTime: "2026-10-01T09:30:00Z",
-    endTime: "2026-10-01T10:30:00Z",
-    status: "not-configured",
-    expiresAt: "2026-10-01T12:00:00Z"
-  }],
-  statusResolver: ({ statusCode }) => statusCode === "active"
-    ? { category: "active" }
-    : null,
-  clock: () => new Date("2026-10-01T09:00:00Z")
-});
-
-assert.equal(unknownHoldStatusService.findAvailableSlots({
-  organizationId: "org-a",
-  resourceIds: ["hold-resource"],
-  serviceIds: ["service-a"],
-  startTime: "2026-10-01T09:00:00Z",
-  endTime: "2026-10-01T11:00:00Z",
-  durationMinutes: 60,
-  slotMinutes: 30
 }).length, 0);

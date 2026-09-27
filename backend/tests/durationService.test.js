@@ -29,6 +29,10 @@ assert.throws(
   /Service not found or inactive/
 );
 assert.throws(
+  () => durationService.calculate({ serviceIds: ["unknown"] }),
+  /Service not found or inactive/
+);
+assert.throws(
   () => durationService.calculate({ serviceIds: [] }),
   /serviceIds must not be empty/
 );

@@ -41,6 +41,8 @@ const first = service.create({
 });
 
 assert.equal(first.number, "WO-1");
+assert.equal(jobService.getForOrganization({ organizationId: "org-a", jobId: "job-1" }).id, "job-1");
+assert.equal(service.getForOrganization({ organizationId: "org-a", workOrderId: "wo-1" }).id, "wo-1");
 
 const second = service.create({
   principal,

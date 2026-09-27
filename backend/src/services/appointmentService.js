@@ -71,6 +71,7 @@ class AppointmentService {
           organizationId,
           resourceIds: [memberId],
           serviceIds,
+          teamId,
           startTime: start,
           endTime: end,
           durationMinutes,

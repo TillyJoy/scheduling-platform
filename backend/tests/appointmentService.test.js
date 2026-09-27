@@ -40,6 +40,7 @@ const hold = service.createHold({
   organizationId: "org-a",
   clientId: "client-1",
   propertyId: "property-1",
+  workOrderId: "wo-1",
   memberIds: ["resource-1"],
   serviceIds: ["service-a"],
   startTime: "2026-10-01T09:00:00Z",
@@ -78,7 +79,23 @@ assert.throws(() => service.createHold({
 const appointment = service.confirmHold({ principal, holdId: "hold-1" });
 assert.equal(appointment.status, "scheduled");
 assert.equal(appointment.id, "hold-1");
+assert.equal(appointment.workOrderId, "wo-1");
 assert.equal(service.get({ principal, appointmentId: "hold-1" }).id, "hold-1");
+const linkedAppointment = service.create({
+  principal,
+  id: "appointment-work-order",
+  organizationId: "org-a",
+  clientId: "client-linked",
+  propertyId: "property-linked",
+  workOrderId: "wo-1",
+  memberIds: ["resource-1"],
+  serviceIds: ["service-a"],
+  startTime: "2026-10-01T10:00:00Z",
+  endTime: "2026-10-01T11:00:00Z",
+  status: "scheduled"
+});
+assert.equal(linkedAppointment.workOrderId, "wo-1");
+assert.equal(service.get({ principal, appointmentId: "appointment-work-order" }).workOrderId, "wo-1");
 
 assert.throws(() => service.createHold({
   principal,

@@ -5,11 +5,13 @@ class DurationService {
   }
 
   calculate({
+    organizationId,
     serviceIds = [],
     funderId = null,
     unitCount = 0,
     propertyType = null
   } = {}) {
+    if (!organizationId) throw new Error("organizationId is required");
     if (!Array.isArray(serviceIds) || serviceIds.length === 0) {
       throw new Error("serviceIds must not be empty");
     }
@@ -18,7 +20,9 @@ class DurationService {
     }
 
     const normalizedIds = [...new Set(serviceIds)].sort();
-    const serviceMap = new Map(this.services.map(service => [service.id, service]));
+    const organizationServices = this.services.filter(service => service.organizationId === organizationId);
+    const organizationRules = this.rules.filter(rule => rule.organizationId === organizationId);
+    const serviceMap = new Map(organizationServices.map(service => [service.id, service]));
     for (const serviceId of normalizedIds) {
       const service = serviceMap.get(serviceId);
       if (!service || service.active === false) {
@@ -26,7 +30,7 @@ class DurationService {
       }
     }
 
-    const matchingRules = this.rules
+    const matchingRules = organizationRules
       .filter(rule => this.#matches(rule, normalizedIds, funderId, unitCount, propertyType))
       .sort((a, b) => this.#specificity(b) - this.#specificity(a));
 

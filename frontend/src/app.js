@@ -19,7 +19,7 @@ function escapeHtml(value) {
 }
 
 function formatTime(value) {
-  return new Date(value).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return new Date(value).toLocaleTimeString([], { timeZone: "UTC", hour: "numeric", minute: "2-digit" });
 }
 
 function dateWindow(dateValue) {

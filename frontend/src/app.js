@@ -68,7 +68,7 @@ async function load(dateValue = new Date().toISOString().slice(0, 10)) {
           method: "POST",
           headers: {"Content-Type": "application/json"},
           body: JSON.stringify({
-            id: "appointment-" + Date.now(),
+            id: crypto.randomUUID(),
             organizationId: "demo-org",
             clientId: "client-1",
             propertyId: "property-1",
@@ -78,7 +78,8 @@ async function load(dateValue = new Date().toISOString().slice(0, 10)) {
             endTime: button.dataset.end
           })
         });
-        await load(dateValue);
+        const currentDate = document.getElementById("schedule-date")?.value || dateValue;
+        await load(currentDate);
       } catch (error) {
         alert(error.message);
         button.disabled = false;

@@ -17,6 +17,9 @@ class Appointment {
     if (!clientId) throw new Error("clientId is required");
     if (!propertyId) throw new Error("propertyId is required");
     if (!startTime || !endTime) throw new Error("startTime and endTime are required");
+    if (new Set(serviceIds).size !== serviceIds.length) {
+      throw new Error("serviceIds must not contain duplicates");
+    }
 
     const start = new Date(startTime);
     const end = new Date(endTime);

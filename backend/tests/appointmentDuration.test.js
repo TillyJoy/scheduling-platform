@@ -82,3 +82,18 @@ const explicit = explicitEndService.create({
 });
 
 assert.equal(explicit.endTime.toISOString(), "2026-10-01T09:30:00.000Z");
+
+assert.throws(
+  () => explicitEndService.create({
+    principal,
+    id: "appointment-5",
+    organizationId: "org-a",
+    clientId: "client-5",
+    propertyId: "property-5",
+    serviceIds: ["amp", "amp"],
+    memberIds: ["resource-5"],
+    startTime: "2026-10-01T10:00:00Z",
+    endTime: "2026-10-01T10:30:00Z"
+  }),
+  /serviceIds must not contain duplicates/
+);

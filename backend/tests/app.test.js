@@ -63,7 +63,7 @@ test("application exposes jobs, availability, and appointment conflict protectio
     assert.equal(crossOrg.status, 403);
 
     const conflict = await request(server, "POST", "/api/appointments", {...input, id: "appointment-2", clientId: "client-2"});
-    assert.equal(conflict.status, 400);
+    assert.equal(conflict.status, 409);
 
     const oversized = await request(server, "POST", "/api/appointments", {
       ...input,

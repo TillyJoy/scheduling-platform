@@ -114,7 +114,13 @@ function ensureDemoAvailability(state, startTime) {
   if (Number.isNaN(start.getTime())) return;
   const day = new Date(start);
   day.setUTCHours(0, 0, 0, 0);
-  state.availabilities.splice(0, state.availabilities.length, {
+  const dayStart = day.getTime();
+  const hasAvailability = state.availabilities.some(availability => {
+    const existingStart = new Date(availability.startTime).getTime();
+    return existingStart >= dayStart && existingStart < dayStart + 24 * 60 * 60000 && availability.resourceId === "auditor-1";
+  });
+  if (hasAvailability) return;
+  state.availabilities.push({
     resourceId: "auditor-1",
     startTime: new Date(day.getTime() + 8 * 60 * 60000).toISOString(),
     endTime: new Date(day.getTime() + 17 * 60 * 60000).toISOString(),
@@ -144,6 +150,9 @@ function createHandler(state) {
       }
       if (req.method === "GET" && path === "/api/availability") {
         const duration = Number(url.searchParams.get("durationMinutes") || 90);
+        if (!Number.isInteger(duration) || duration <= 0) {
+          return json(res, 400, { error: "durationMinutes must be a positive integer" });
+        }
         const start = url.searchParams.get("start") || new Date().toISOString();
         const end = url.searchParams.get("end") || new Date(new Date(start).getTime() + 9 * 60 * 60000).toISOString();
         ensureDemoAvailability(state, start);

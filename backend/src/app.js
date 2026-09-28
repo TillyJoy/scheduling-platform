@@ -171,6 +171,9 @@ function createHandler(state) {
       }
       if (req.method === "POST" && path === "/api/appointments") {
         const input = await readBody(req);
+        if (!input || typeof input !== "object" || Array.isArray(input)) {
+          return json(res, 400, { error: "Request body must be a JSON object" });
+        }
         if (input.organizationId && input.organizationId !== p.organizationId) {
           return json(res, 403, { error: "Not authorized for the requested organization" });
         }
@@ -191,11 +194,7 @@ function createHandler(state) {
       return json(res, 404, { error: "Route not found" });
     } catch (error) {
       if (error.statusCode === 413) return json(res, 413, { error: error.message });
-      const status = /authorized|principal/i.test(error.message)
-        ? 403
-        : /required|valid|after|available|overlapping/i.test(error.message)
-          ? 400
-          : 500;
+      const status = Number.isInteger(error.statusCode) ? error.statusCode : 500;
       if (status >= 500) {
         console.error("Unhandled application error", error);
         return json(res, 500, { error: "Internal server error" });

@@ -19,7 +19,7 @@ class AppointmentService {
     this.statusResolver = statusResolver;
   }
 
-  create({ principal, ...input }) {
+  create({ principal, enforceAvailability = false, ...input }) {
     this.#requirePrincipal(principal);
     const appointment = new Appointment(input);
     this.#authorize(principal, "appointment:create", appointment.organizationId);
@@ -30,6 +30,7 @@ class AppointmentService {
       throw error;
     }
     this.#assertResourcesAvailable(appointment);
+    if (enforceAvailability) this.#assertExactAvailability(appointment);
     this.appointmentStore.set(key, appointment);
     return appointment;
   }
@@ -69,27 +70,14 @@ class AppointmentService {
       throw new Error("Appointment ID already exists");
     }
 
-    if (this.schedulingService) {
-      for (const memberId of memberIds) {
-        const durationMinutes = (end.getTime() - start.getTime()) / 60000;
-        const slots = this.schedulingService.findAvailableSlots({
-          organizationId,
-          resourceIds: [memberId],
-          serviceIds,
-          teamId,
-          startTime: start,
-          endTime: end,
-          durationMinutes,
-          slotMinutes: durationMinutes
-        });
-        const exact = slots.some(slot =>
-          slot.resourceId === memberId &&
-          slot.startTime.getTime() === start.getTime() &&
-          slot.endTime.getTime() === end.getTime()
-        );
-        if (!exact) throw new Error("Requested appointment slot is no longer available");
-      }
-    }
+    this.#assertExactAvailability({
+      organizationId,
+      serviceIds,
+      teamId,
+      memberIds,
+      startTime: start,
+      endTime: end
+    });
 
     const hold = {
       id,
@@ -175,6 +163,43 @@ class AppointmentService {
       .filter(a => !start || a.endTime > start)
       .filter(a => !end || a.startTime < end)
       .sort((a, b) => a.startTime - b.startTime);
+  }
+
+  #assertExactAvailability(candidate) {
+    if (!this.schedulingService) {
+      const error = new Error("Scheduling availability is required to create an appointment");
+      error.statusCode = 500;
+      throw error;
+    }
+    if (!Array.isArray(candidate.memberIds) || candidate.memberIds.length === 0) {
+      const error = new Error("memberIds must not be empty");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const durationMinutes = (candidate.endTime.getTime() - candidate.startTime.getTime()) / 60000;
+    for (const memberId of candidate.memberIds) {
+      const slots = this.schedulingService.findAvailableSlots({
+        organizationId: candidate.organizationId,
+        resourceIds: [memberId],
+        serviceIds: candidate.serviceIds,
+        teamId: candidate.teamId,
+        startTime: candidate.startTime,
+        endTime: candidate.endTime,
+        durationMinutes,
+        slotMinutes: durationMinutes
+      });
+      const exact = slots.some(slot =>
+        slot.resourceId === memberId &&
+        slot.startTime.getTime() === candidate.startTime.getTime() &&
+        slot.endTime.getTime() === candidate.endTime.getTime()
+      );
+      if (!exact) {
+        const error = new Error("Requested appointment slot is not available");
+        error.statusCode = 409;
+        throw error;
+      }
+    }
   }
 
   #assertResourcesAvailable(candidate) {

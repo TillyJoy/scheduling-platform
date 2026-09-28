@@ -180,7 +180,8 @@ function createHandler(state) {
         const appointment = state.appointmentService.create({
           ...input,
           principal: p,
-          organizationId: p.organizationId
+          organizationId: p.organizationId,
+          enforceAvailability: true
         });
         return json(res, 201, {
           ...appointment,

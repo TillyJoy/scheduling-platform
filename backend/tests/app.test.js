@@ -5,7 +5,8 @@ const { createAppState, createHandler } = require("../src/app");
 
 function request(server, method, path, body) {
   return new Promise((resolve, reject) => {
-    const req = http.request(server, { method, path, headers: {"Content-Type": "application/json"} }, res => {
+    const address = server.address();
+    const req = http.request({ hostname: "127.0.0.1", port: address.port, method, path, headers: {"Content-Type": "application/json"} }, res => {
       let data = "";
       res.on("data", chunk => data += chunk);
       res.on("end", () => {

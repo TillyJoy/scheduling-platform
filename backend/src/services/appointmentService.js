@@ -24,7 +24,7 @@ class AppointmentService {
     const appointment = new Appointment(input);
     this.#authorize(principal, "appointment:create", appointment.organizationId);
     const key = this.#key(appointment.organizationId, appointment.id);
-    if (this.appointmentStore.has(key)) throw new Error("Appointment ID already exists");
+    if (this.appointmentStore.has(key)) {\n      const error = new Error("Appointment ID already exists");\n      error.statusCode = 409;\n      throw error;\n    }
     this.#assertResourcesAvailable(appointment);
     this.appointmentStore.set(key, appointment);
     return appointment;
@@ -179,9 +179,9 @@ class AppointmentService {
       if (!this.#consumesAppointment(existing)) continue;
       if (existing.endTime <= candidate.startTime || existing.startTime >= candidate.endTime) continue;
       const conflict = candidate.memberIds.some(id => existing.memberIds.includes(id));
-      if (conflict) throw new Error("Resource is already assigned to an overlapping appointment");
+      if (conflict) {\n        const error = new Error("Resource is already assigned to an overlapping appointment");\n        error.statusCode = 409;\n        throw error;\n      }
       if (candidate.teamId && candidate.teamId === existing.teamId) {
-        throw new Error("Team is already assigned to an overlapping appointment");
+        const error = new Error("Team is already assigned to an overlapping appointment");\n        error.statusCode = 409;\n        throw error;
       }
     }
   }

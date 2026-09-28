@@ -45,6 +45,16 @@ test("application exposes jobs, availability, and appointment conflict protectio
       startTime: slot.startTime,
       endTime: slot.endTime
     };
+
+    const unavailableSlot = await request(server, "POST", "/api/appointments", {
+      ...input,
+      id: "appointment-unavailable",
+      startTime: "2026-10-02T08:30:00Z",
+      endTime: "2026-10-02T10:00:00Z"
+    });
+    assert.equal(unavailableSlot.status, 409);
+    assert.equal(unavailableSlot.body.error, "Requested appointment slot is not available");
+
     const created = await request(server, "POST", "/api/appointments", {...input, id: "appointment-1"});
     assert.equal(created.status, 201);
 

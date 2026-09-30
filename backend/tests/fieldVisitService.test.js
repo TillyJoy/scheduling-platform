@@ -161,10 +161,20 @@ assert.equal(closedIncomplete.outcomeCode, "client_unavailable");
 assert.equal(closedIncomplete.closedByUserId, "user-a");
 assert.equal(closedIncomplete.completedAt, null);
 
-
+const visitMissingCompletion = fieldVisitService.create({
+  principal,
+  id: "visit-missing-completion",
+  appointmentId: "appointment-1",
+  workOrderId: "wo-1"
+});
+fieldVisitService.start({
+  principal,
+  fieldVisitId: visitMissingCompletion.id,
+  actualStartTime: "2026-10-01T12:00:00Z"
+});
 assert.throws(() => fieldVisitService.complete({
   principal,
-  fieldVisitId: "visit-incomplete",
+  fieldVisitId: visitMissingCompletion.id,
   completionData: {},
   statusCode: "completed"
 }), /completionData is required/);

@@ -21,6 +21,9 @@ class Appointment {
     if (!Array.isArray(serviceIds)) throw new Error("serviceIds must be an array");
     if (!Array.isArray(memberIds)) throw new Error("memberIds must be an array");
     if (!startTime || !endTime) throw new Error("startTime and endTime are required");
+    if (new Set(serviceIds).size !== serviceIds.length) {
+      throw new Error("serviceIds must not contain duplicates");
+    }
 
     const start = new Date(startTime);
     const end = new Date(endTime);

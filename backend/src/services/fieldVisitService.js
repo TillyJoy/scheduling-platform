@@ -310,6 +310,20 @@ class FieldVisitService {
       metadata: visit.metadata
     });
   }
+  #authorize(principal, action, organizationId) {
+    if (!this.authorize(principal, action, organizationId)) {
+      const error = new Error("Not authorized");
+      error.statusCode = 403;
+      throw error;
+    }
+  }
+
+  #requirePrincipal(principal) {
+    if (!principal?.userId || !principal?.organizationId) {
+      throw new Error("Trusted principal is required");
+    }
+  }
+
 }
 
 module.exports = { FieldVisitService };

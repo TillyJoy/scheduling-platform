@@ -159,3 +159,11 @@ const closedIncomplete = fieldVisitService.closeIncomplete({
 assert.equal(closedIncomplete.outcomeCode, "client_unavailable");
 assert.equal(closedIncomplete.closedByUserId, "user-a");
 assert.equal(closedIncomplete.completedAt, null);
+
+
+assert.throws(() => fieldVisitService.complete({
+  principal,
+  fieldVisitId: "visit-incomplete",
+  completionData: {},
+  statusCode: "completed"
+}), /completionData is required/);

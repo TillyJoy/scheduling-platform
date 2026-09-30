@@ -11,8 +11,11 @@ class NotificationService {
     const notification = new Notification(input);
     this.#authorize(principal, ACTIONS.CREATE, { organizationId: notification.organizationId, recipientId: notification.recipientId });
     if (this.notificationStore.has(notification.id)) throw new Error("Notification ID already exists");
+    if (notification.deliveryKey && [...this.notificationStore.values()].some(existing => existing.organizationId === notification.organizationId && existing.deliveryKey === notification.deliveryKey)) {
+      throw new Error("Notification delivery already exists");
+    }
     this.notificationStore.set(notification.id, notification);
-    this.auditStore.push(new AuditEvent({ id:`notification-created:${notification.id}`, organizationId:notification.organizationId, userId:principal.userId, action:"notification.created", entityType:"notification", entityId:notification.id, newValue:{severity:notification.severity,recipientId:notification.recipientId,sourceEventType:notification.sourceEventType} }));
+    this.auditStore.push(new AuditEvent({ id:`notification-created:${notification.id}`, organizationId:notification.organizationId, userId:principal.userId, action:"notification.created", entityType:"notification", entityId:notification.id, newValue:{severity:notification.severity,recipientId:notification.recipientId,sourceEventId:notification.sourceEventId,sourceEventType:notification.sourceEventType,deliveryKey:notification.deliveryKey} }));
     return notification;
   }
 

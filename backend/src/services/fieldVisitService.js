@@ -246,7 +246,7 @@ class FieldVisitService {
   }
 
   #saveAndRecord(principal, visit, action, previousValue, newValue, occurredAt = this.clock()) {
-    visit.version += 1;
+    visit.version = (Number.isInteger(visit.version) ? visit.version : 1) + 1;
     this.fieldVisitStore.set(FieldVisitService.storageKey(visit.organizationId, visit.id), visit);
     this.#audit(principal, action, visit.id, previousValue, { ...newValue, version: visit.version }, occurredAt);
     this.#emit(principal, action.replaceAll("-", "_"), visit, occurredAt);

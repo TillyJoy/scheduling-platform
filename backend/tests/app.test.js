@@ -18,7 +18,7 @@ function request(server, method, path, body) {
       });
     });
     req.on("error", reject);
-    if (body) req.write(JSON.stringify(body));
+    if (body) req.write(typeof body === "string" ? body : JSON.stringify(body));
     req.end();
   });
 }
@@ -81,6 +81,10 @@ test("application exposes jobs, availability, and appointment conflict protectio
       notes: "x".repeat(1024 * 1024)
     });
     assert.equal(oversized.status, 413);
+
+    const malformedJson = await request(server, "POST", "/api/appointments", "{\"organizationId\":");
+    assert.equal(malformedJson.status, 400);
+    assert.equal(malformedJson.body.error, "Request body must be valid JSON");
   } finally {
     await new Promise(resolve => server.close(resolve));
   }

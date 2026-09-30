@@ -104,7 +104,9 @@ async function readBody(req) {
   try {
     return JSON.parse(body);
   } catch {
-    throw new Error("Request body must be valid JSON");
+    const error = new Error("Request body must be valid JSON");
+    error.statusCode = 400;
+    throw error;
   }
 }
 

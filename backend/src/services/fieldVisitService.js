@@ -57,9 +57,11 @@ class FieldVisitService {
     const key = FieldVisitService.storageKey(visit.organizationId, visit.id);
     if (this.fieldVisitStore.has(key)) throw new Error("Field visit ID already exists");
 
+    const eventTime = occurredAt === null ? this.clock() : new Date(occurredAt);
+    if (Number.isNaN(eventTime.getTime())) throw new Error("occurredAt must be a valid date");
     this.fieldVisitStore.set(key, visit);
-    this.#audit(principal, "field-visit.created", visit.id, null, visit);
-    this.#emit(principal, "field_visit.created", visit);
+    this.#audit(principal, "field-visit.created", visit.id, null, visit, eventTime);
+    this.#emit(principal, "field_visit.created", visit, eventTime);
     return this.#clone(visit);
   }
 

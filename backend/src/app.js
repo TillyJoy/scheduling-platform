@@ -2,8 +2,14 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { SchedulingService } = require("./services/schedulingService");
 const { AppointmentService } = require("./services/appointmentService");
+const { AuthenticationService } = require("./services/authenticationService");
 const { Resource } = require("./models/resource");
 const { Job } = require("./models/job");
+const { JobService } = require("./services/jobService");
+const { WorkOrderService } = require("./services/workOrderService");
+const { FieldVisitService } = require("./services/fieldVisitService");
+const { ActualWorkService } = require("./services/actualWorkService");
+const { DomainEventService } = require("./services/domainEventService");
 
 const MAX_BODY_BYTES = 1024 * 1024;
 const FRONTEND_FILES = {
@@ -24,6 +30,11 @@ function createAppState(seed = {}) {
   const assignments = seed.assignments || [];
   const holds = seed.holds || [];
   const appointments = seed.appointments || [];
+  const workOrders = seed.workOrders || [];
+  const fieldVisits = seed.fieldVisits || [];
+  const actualWork = seed.actualWork || [];
+  const auditEvents = seed.auditEvents || [];
+  const domainEvents = seed.domainEvents || [];
   const jobs = seed.jobs || [new Job({
     id: "job-1",
     organizationId: "demo-org",
@@ -39,6 +50,12 @@ function createAppState(seed = {}) {
       appointment
     ])
   );
+  const jobStore = new Map(jobs.map(job => [JSON.stringify([job.organizationId, job.id]), job]));
+  const jobService = new JobService({ jobStore, authorize: () => true });
+  const workOrderStore = new Map(workOrders.map(order => [JSON.stringify([order.organizationId, order.id]), order]));
+  const workOrderService = new WorkOrderService({ workOrderStore, jobService });
+  const domainEventService = new DomainEventService({ eventStore: domainEvents, auditStore: auditEvents });
+
   const schedulingService = new SchedulingService({
     resources,
     availabilities,
@@ -66,6 +83,22 @@ function createAppState(seed = {}) {
     schedulingService
   });
 
+  const fieldVisitStore = new Map(fieldVisits.map(visit => [JSON.stringify([visit.organizationId, visit.id]), visit]));
+  const actualWorkStore = new Map(actualWork.map(work => [JSON.stringify([work.organizationId, work.id]), work]));
+  const fieldVisitService = new FieldVisitService({
+    fieldVisitStore,
+    appointmentStore,
+    workOrderService,
+    auditStore: auditEvents,
+    domainEventService
+  });
+  const actualWorkService = new ActualWorkService({
+    actualWorkStore,
+    fieldVisitStore,
+    auditStore: auditEvents,
+    domainEventService
+  });
+
   return {
     resources,
     availabilities,
@@ -73,9 +106,20 @@ function createAppState(seed = {}) {
     holds,
     appointments,
     jobs,
+    workOrders,
+    fieldVisits,
+    actualWork,
+    auditEvents,
+    domainEvents,
+    jobService,
+    workOrderService,
+    fieldVisitService,
+    actualWorkService,
+    domainEventService,
     demoAvailability,
     schedulingService,
-    appointmentService
+    appointmentService,
+    authenticationService: seed.authenticationService || null
   };
 }
 
@@ -83,7 +127,26 @@ function principal() {
   return {
     userId: "demo-user",
     organizationId: "demo-org",
-    permissions: ["appointment:create", "appointment:read", "appointment:confirm", "appointment:cancel"]
+    permissions: ["appointment:create", "appointment:read", "appointment:confirm", "appointment:cancel", "fieldVisit:create", "fieldVisit:read", "fieldVisit:update", "actualWork:create", "actualWork:read"]
+  };
+}
+
+function serializeFieldVisit(visit) {
+  return {
+    ...visit,
+    arrivedAt: visit.arrivedAt?.toISOString() ?? null,
+    actualStartTime: visit.actualStartTime?.toISOString() ?? null,
+    actualEndTime: visit.actualEndTime?.toISOString() ?? null,
+    completedAt: visit.completedAt?.toISOString() ?? null,
+    closedAt: visit.closedAt?.toISOString() ?? null
+  };
+}
+
+function serializeActualWork(work) {
+  return {
+    ...work,
+    actualStartTime: work.actualStartTime?.toISOString() ?? null,
+    actualEndTime: work.actualEndTime?.toISOString() ?? null
   };
 }
 
@@ -155,15 +218,34 @@ function ensureDemoAvailability(state, startTime) {
   });
 }
 
-function createHandler(state) {
+function createHandler(state, {
+  authenticationService = state.authenticationService,
+  allowDevelopmentBypass =
+    process.env.NODE_ENV === "development" &&
+    process.env.ALLOW_DEVELOPMENT_AUTH_BYPASS === "true"
+} = {}) {
   return async (req, res) => {
     try {
       const url = new URL(req.url, "http://localhost");
       const path = url.pathname;
-      const p = principal();
 
+      if (req.method === "GET" && path === "/health") {
+        return json(res, 200, { status: "ok", service: "scheduling-platform" });
+      }
       if (req.method === "GET" && FRONTEND_FILES[path]) {
         return staticFile(res, FRONTEND_FILES[path]);
+      }
+
+      let p;
+      if (allowDevelopmentBypass) {
+        p = principal();
+      } else {
+        if (!(authenticationService instanceof AuthenticationService)) {
+          const error = new Error("Authentication is not configured");
+          error.statusCode = 500;
+          throw error;
+        }
+        p = authenticationService.authenticateAuthorizationHeader(req.headers.authorization);
       }
 
       if (req.method === "GET" && path === "/api/jobs") {
@@ -200,6 +282,60 @@ function createHandler(state) {
           endTime: slot.endTime.toISOString()
         })));
       }
+      if (req.method === "GET" && path === "/api/field-visits") {
+        const visits = state.fieldVisitService.list({
+          principal: p,
+          appointmentId: url.searchParams.get("appointmentId"),
+          workOrderId: url.searchParams.get("workOrderId"),
+          resourceId: url.searchParams.get("resourceId")
+        });
+        return json(res, 200, visits.map(serializeFieldVisit));
+      }
+      if (req.method === "GET" && path.startsWith("/api/field-visits/")) {
+        const id = path.slice("/api/field-visits/".length);
+        return json(res, 200, serializeFieldVisit(state.fieldVisitService.get({ principal: p, fieldVisitId: id })));
+      }
+      if (req.method === "POST" && path === "/api/field-visits") {
+        const input = await readBody(req);
+        if (!input || typeof input !== "object" || Array.isArray(input)) return json(res, 400, { error: "Request body must be a JSON object" });
+        const visit = state.fieldVisitService.create({ ...input, principal: p, organizationId: p.organizationId });
+        return json(res, 201, serializeFieldVisit(visit));
+      }
+      const fieldVisitAction = path.match(/^\/api\/field-visits\/([^/]+)\/(arrive|start|stop|complete|close-incomplete)$/);
+      if (req.method === "POST" && fieldVisitAction) {
+        const input = await readBody(req);
+        const fieldVisitId = fieldVisitAction[1];
+        const action = fieldVisitAction[2];
+        const payload = { principal: p, fieldVisitId, ...(input && typeof input === "object" && !Array.isArray(input) ? input : {}) };
+        const visit = action === "arrive"
+          ? state.fieldVisitService.arrive(payload)
+          : action === "start"
+            ? state.fieldVisitService.start(payload)
+            : action === "stop"
+              ? state.fieldVisitService.stop(payload)
+              : action === "complete"
+                ? state.fieldVisitService.complete(payload)
+                : state.fieldVisitService.closeIncomplete(payload);
+        return json(res, 200, serializeFieldVisit(visit));
+      }
+      if (req.method === "GET" && path === "/api/actual-work") {
+        const work = state.actualWorkService.list({
+          principal: p,
+          fieldVisitId: url.searchParams.get("fieldVisitId"),
+          workOrderId: url.searchParams.get("workOrderId")
+        });
+        return json(res, 200, work.map(serializeActualWork));
+      }
+      if (req.method === "GET" && path.startsWith("/api/actual-work/")) {
+        const id = path.slice("/api/actual-work/".length);
+        return json(res, 200, serializeActualWork(state.actualWorkService.get({ principal: p, actualWorkId: id })));
+      }
+      if (req.method === "POST" && path === "/api/actual-work") {
+        const input = await readBody(req);
+        if (!input || typeof input !== "object" || Array.isArray(input)) return json(res, 400, { error: "Request body must be a JSON object" });
+        const work = state.actualWorkService.create({ ...input, principal: p, organizationId: p.organizationId });
+        return json(res, 201, serializeActualWork(work));
+      }
       if (req.method === "POST" && path === "/api/appointments") {
         const input = await readBody(req);
         if (!input || typeof input !== "object" || Array.isArray(input)) {
@@ -219,9 +355,6 @@ function createHandler(state) {
           startTime: appointment.startTime.toISOString(),
           endTime: appointment.endTime.toISOString()
         });
-      }
-      if (req.method === "GET" && path === "/health") {
-        return json(res, 200, { status: "ok", service: "scheduling-platform" });
       }
       return json(res, 404, { error: "Route not found" });
     } catch (error) {

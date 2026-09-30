@@ -78,3 +78,52 @@ This layer does not hard-code:
 - rework rules
 
 Those belong to organization configuration or later workflow layers.
+
+
+## Execution foundation
+
+The field execution foundation supports the minimum lifecycle needed to turn a scheduled appointment into recorded execution:
+
+**scheduled → arrived → started → stopped → completed**
+
+A visit may instead be closed as incomplete/failed with an organization-defined outcome code, reason, and status.
+
+### Execution data
+
+Field Visits retain:
+
+- appointment and work-order linkage
+- assigned resource snapshot derived from the appointment
+- arrival timestamp
+- actual start/end timestamps
+- configurable status code
+- notes
+- structured observations
+- organization-defined completion data
+- completion actor/timestamp
+- incomplete/failed outcome code and reason
+- organization metadata
+
+Actual Work remains a separate record tied to the Field Visit and Work Order.
+
+### API boundary
+
+The authenticated API exposes Field Visit creation, retrieval, listing, arrival, start, stop, completion, and incomplete closure operations, plus Actual Work creation/retrieval/listing.
+
+All operations require a trusted authenticated principal and explicit organization-scoped permissions.
+
+### Completion requirements
+
+The service accepts an injected completion validator so organizations can later configure required completion information without hard-coding service-specific fields into the platform. The current foundation requires non-empty completion data.
+
+### Attachments
+
+No attachment/document-reference subsystem exists in the current architecture, so this foundation does not invent one. Evidence files and attachment references remain a subsequent capability.
+
+### Downstream consumption
+
+Field Visit lifecycle changes and Actual Work creation emit domain events through the existing domain-event service. Audit records are created for execution changes. Monday.com remains downstream of these platform events and is not part of the execution transaction.
+
+### Current persistence boundary
+
+The implementation remains in-memory, consistent with the repository's current service architecture. Durable persistence and transactional event/outbox coupling remain later infrastructure work.

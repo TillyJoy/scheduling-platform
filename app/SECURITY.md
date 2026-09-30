@@ -370,3 +370,22 @@ Potential future requirements may include:
 - Security questionnaires
 - Funder-specific requirements
 - State or federal requirements
+
+
+## Current Authentication Implementation
+
+The backend API now has an authentication boundary.
+
+Protected API requests must provide a signed bearer token. The token carries the authenticated user, organization, permissions, session identifier, and expiry, and is verified with a server-side HMAC secret before a trusted principal is passed to domain services.
+
+Authentication is fail-closed by default. A development-only demo principal can be enabled only with an explicit local environment setting.
+
+The authentication boundary does not yet constitute the complete production identity system. The following remain separate implementation work:
+
+- User credential or SSO provider integration
+- Login and account recovery flows
+- MFA
+- Session revocation and device/session management
+- Rate limiting and abuse controls
+- Authentication security monitoring
+- Production key rotation and secret-management integration

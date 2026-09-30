@@ -23,7 +23,7 @@ class FieldVisitService {
     this.completionValidator = completionValidator;
   }
 
-  create({ principal, ...input }) {
+  create({ principal, occurredAt = null, ...input }) {
     this.#requirePrincipal(principal);
     this.#authorize(principal, "fieldVisit:create", principal.organizationId);
 

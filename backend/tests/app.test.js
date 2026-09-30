@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const http = require("http");
 const { createAppState, createHandler } = require("../src/app");
 const { AuthenticationService } = require("../src/services/authenticationService");
+const { WorkOrder } = require("../src/models/workOrder");
 
 const AUTH_SECRET = "test-secret-that-is-at-least-32-bytes-long";
 
@@ -45,12 +46,12 @@ function request(server, method, path, body, headers = {}) {
   });
 }
 
-function authenticatedServer() {
+function authenticatedServer(permissions = ["appointment:create", "appointment:read"]) {
   const authenticationService = new AuthenticationService({ secret: AUTH_SECRET });
   const token = authenticationService.issueToken({
     userId: "demo-user",
     organizationId: "demo-org",
-    permissions: ["appointment:create", "appointment:read"]
+    permissions
   });
   const state = createAppState({ authenticationService });
   const server = http.createServer(createHandler(state, { allowDevelopmentBypass: false }));
@@ -165,6 +166,134 @@ test("application serves the scheduler shell and frontend asset", async () => {
     assert.equal(script.status, 200);
     assert.match(script.headers["content-type"], /^text\/javascript/);
     assert.match(script.body, /\/api\/availability/);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
+
+test("authenticated field execution API records a visit and actual work", async () => {
+  const authenticationService = new AuthenticationService({ secret: AUTH_SECRET });
+  const token = authenticationService.issueToken({
+    userId: "field-worker-1",
+    organizationId: "demo-org",
+    permissions: [
+      "fieldVisit:create",
+      "fieldVisit:read",
+      "fieldVisit:update",
+      "actualWork:create",
+      "actualWork:read"
+    ]
+  });
+  const workOrder = new WorkOrder({
+    id: "wo-field-1",
+    organizationId: "demo-org",
+    jobId: "job-1",
+    number: "WO-1",
+    title: "Field execution test"
+  });
+  const appointment = {
+    id: "appointment-field-1",
+    organizationId: "demo-org",
+    workOrderId: workOrder.id,
+    memberIds: ["auditor-1"]
+  };
+  const state = createAppState({
+    authenticationService,
+    workOrders: [workOrder],
+    appointments: [appointment]
+  });
+  const server = http.createServer(createHandler(state, { allowDevelopmentBypass: false }));
+  await new Promise(resolve => server.listen(0, resolve));
+  const auth = { Authorization: `Bearer ${token}` };
+  try {
+    const unauthorized = await request(server, "GET", "/api/field-visits");
+    assert.equal(unauthorized.status, 401);
+
+    const created = await request(server, "POST", "/api/field-visits", {
+      id: "visit-api-1",
+      appointmentId: appointment.id,
+      workOrderId: workOrder.id,
+      notes: "Arrival notes",
+      observations: [{ code: "condition", value: "normal" }]
+    }, auth);
+    assert.equal(created.status, 201);
+    assert.deepEqual(created.body.resourceIds, ["auditor-1"]);
+
+    const arrived = await request(server, "POST", "/api/field-visits/visit-api-1/arrive", {
+      arrivedAt: "2026-10-01T09:55:00Z",
+      statusCode: "arrived"
+    }, auth);
+    assert.equal(arrived.status, 200);
+
+    const started = await request(server, "POST", "/api/field-visits/visit-api-1/start", {
+      actualStartTime: "2026-10-01T10:00:00Z",
+      statusCode: "in_progress"
+    }, auth);
+    assert.equal(started.status, 200);
+
+    const work = await request(server, "POST", "/api/actual-work", {
+      id: "actual-api-1",
+      fieldVisitId: "visit-api-1",
+      workOrderId: workOrder.id,
+      resourceId: "auditor-1",
+      description: "Performed configured work",
+      actualStartTime: "2026-10-01T10:05:00Z",
+      actualEndTime: "2026-10-01T11:00:00Z",
+      quantity: 1,
+      unit: "unit"
+    }, auth);
+    assert.equal(work.status, 201);
+
+    const completed = await request(server, "POST", "/api/field-visits/visit-api-1/complete", {
+      completionData: { requiredField: true },
+      statusCode: "completed"
+    }, auth);
+    assert.equal(completed.status, 200);
+    assert.equal(completed.body.completedByUserId, "field-worker-1");
+    assert.equal(completed.body.completionData.requiredField, true);
+
+    const events = state.domainEvents.filter(event => event.entityId === "visit-api-1");
+    assert.ok(events.some(event => event.eventType === "field_visit.created"));
+    assert.ok(events.some(event => event.eventType === "field_visit.arrived"));
+    assert.ok(events.some(event => event.eventType === "field_visit.started"));
+    assert.ok(events.some(event => event.eventType === "field_visit.completed"));
+
+    const audit = state.auditEvents.filter(event => event.entityId === "visit-api-1");
+    assert.ok(audit.length >= 4);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
+test("field execution API enforces tenant and permission boundaries", async () => {
+  const authenticationService = new AuthenticationService({ secret: AUTH_SECRET });
+  const state = createAppState({ authenticationService });
+  const server = http.createServer(createHandler(state, { allowDevelopmentBypass: false }));
+  await new Promise(resolve => server.listen(0, resolve));
+  try {
+    const noPermissionToken = authenticationService.issueToken({
+      userId: "reader",
+      organizationId: "demo-org",
+      permissions: ["fieldVisit:read"]
+    });
+    const forbidden = await request(server, "POST", "/api/field-visits", {
+      id: "forbidden-visit",
+      appointmentId: "missing",
+      workOrderId: "missing"
+    }, { Authorization: `Bearer ${noPermissionToken}` });
+    assert.equal(forbidden.status, 403);
+
+    const otherTenantToken = authenticationService.issueToken({
+      userId: "other-user",
+      organizationId: "other-org",
+      permissions: ["fieldVisit:read"]
+    });
+    const otherTenant = await request(server, "GET", "/api/field-visits", null, {
+      Authorization: `Bearer ${otherTenantToken}`
+    });
+    assert.equal(otherTenant.status, 200);
+    assert.deepEqual(otherTenant.body, []);
   } finally {
     await new Promise(resolve => server.close(resolve));
   }

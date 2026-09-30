@@ -175,6 +175,7 @@ fieldVisitService.start({
 assert.throws(() => fieldVisitService.complete({
   principal,
   fieldVisitId: visitMissingCompletion.id,
+  actualEndTime: "2026-10-01T13:00:00Z",
   completionData: {},
   statusCode: "completed"
 }), /completionData is required/);

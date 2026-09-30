@@ -10,7 +10,7 @@ function fixture() {
   const principal = {
     userId: "worker-1",
     organizationId: "org-a",
-    permissions: ["fieldVisit:create", "fieldVisit:read", "fieldVisit:update", "actualWork:create", "actualWork:read", "fieldExecution:sync"]
+    permissions: ["fieldVisit:create", "fieldVisit:read", "fieldVisit:update", "actualWork:create", "actualWork:read", "fieldExecution:sync", "workOrder:create"]
   };
   const jobService = new JobService({ authorize: () => true });
   const workOrderService = new WorkOrderService({ jobService });

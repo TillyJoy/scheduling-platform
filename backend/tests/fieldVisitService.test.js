@@ -34,7 +34,8 @@ const appointmentStore = new Map([
   [JSON.stringify(["org-a", "appointment-1"]), {
     id: "appointment-1",
     organizationId: "org-a",
-    workOrderId: "wo-1"
+    workOrderId: "wo-1",
+    memberIds: ["resource-1"]
   }],
   [JSON.stringify(["org-b", "appointment-1"]), {
     id: "appointment-1",

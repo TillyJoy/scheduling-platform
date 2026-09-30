@@ -56,6 +56,9 @@ class NotificationEventProcessor {
           };
 
           if (template.channel === "in_app") {
+            const existingNotification = [...this.notificationService.notificationStore.values()].find(candidate =>
+              candidate.organizationId === event.organizationId && candidate.deliveryKey === result.deliveryKey
+            );
             const notification = this.notificationService.create({
               principal,
               id: result.id,
@@ -72,7 +75,7 @@ class NotificationEventProcessor {
               deliveryKey: result.deliveryKey,
               requiresAcknowledgement: rule.required
             });
-            result.status = "created";
+            result.status = existingNotification ? "deduplicated" : "created";
             result.notificationId = notification.id;
           } else if (this.deliverySink) {
             this.deliverySink({ ...result, organizationId: event.organizationId, subject: rendered.subject, body: rendered.body, event });

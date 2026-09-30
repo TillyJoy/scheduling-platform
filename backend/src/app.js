@@ -159,7 +159,9 @@ function ensureDemoAvailability(state, startTime) {
 
 function createHandler(state, {
   authenticationService = state.authenticationService,
-  allowDevelopmentBypass = process.env.ALLOW_DEVELOPMENT_AUTH_BYPASS === "true"
+  allowDevelopmentBypass =
+    process.env.NODE_ENV === "development" &&
+    process.env.ALLOW_DEVELOPMENT_AUTH_BYPASS === "true"
 } = {}) {
   return async (req, res) => {
     try {

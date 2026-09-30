@@ -65,6 +65,8 @@ const visit = fieldVisitService.create({
 
 assert.equal(visit.id, "visit-1");
 assert.equal(visit.actualStartTime, null);
+assert.deepEqual(visit.resourceIds, ["resource-1"]);
+assert.equal(visit.observations.length, 0);
 assert.equal(fieldVisitService.get({ principal, fieldVisitId: "visit-1" }).workOrderId, "wo-1");
 
 assert.throws(() => fieldVisitService.create({
@@ -76,18 +78,32 @@ assert.throws(() => fieldVisitService.create({
 
 assert.throws(() => fieldVisitService.get({ principal: otherOrg, fieldVisitId: "visit-1" }), /Field visit not found/);
 
-const started = fieldVisitService.start({ principal, fieldVisitId: "visit-1" });
+const arrived = fieldVisitService.arrive({ principal, fieldVisitId: "visit-1", arrivedAt: "2026-10-01T09:55:00Z", statusCode: "arrived" });
+assert.equal(arrived.arrivedAt.toISOString(), "2026-10-01T09:55:00.000Z");
+
+const started = fieldVisitService.start({ principal, fieldVisitId: "visit-1", statusCode: "in_progress" });
 assert.equal(started.actualStartTime.toISOString(), "2026-10-01T10:00:00.000Z");
 
 assert.throws(() => fieldVisitService.start({ principal, fieldVisitId: "visit-1" }), /already started/);
 
+const stopped = fieldVisitService.stop({
+  principal,
+  fieldVisitId: "visit-1",
+  actualEndTime: "2026-10-01T11:30:00Z",
+  statusCode: "stopped"
+});
+assert.equal(stopped.actualEndTime.toISOString(), "2026-10-01T11:30:00.000Z");
+
 const completed = fieldVisitService.complete({
   principal,
   fieldVisitId: "visit-1",
-  actualEndTime: "2026-10-01T11:30:00Z"
+  completionData: { result: "complete", requiredField: true },
+  statusCode: "completed"
 });
 assert.equal(completed.actualEndTime.toISOString(), "2026-10-01T11:30:00.000Z");
 assert.equal(completed.completedByUserId, "user-a");
+assert.equal(completed.statusCode, "completed");
+assert.equal(completed.completionData.requiredField, true);
 
 const actualWorkService = new ActualWorkService({
   actualWorkStore: new Map(),
@@ -124,3 +140,22 @@ assert.throws(() => actualWorkService.create({
 assert.throws(() => actualWorkService.get({ principal: otherOrg, actualWorkId: "work-1" }), /Actual work not found/);
 
 assert.equal(auditStore.filter(event => event.organizationId === "org-a").length >= 3, true);
+
+
+const incomplete = fieldVisitService.create({
+  principal,
+  id: "visit-incomplete",
+  appointmentId: "appointment-1",
+  workOrderId: "wo-1",
+  statusCode: "scheduled"
+});
+const closedIncomplete = fieldVisitService.closeIncomplete({
+  principal,
+  fieldVisitId: incomplete.id,
+  outcomeCode: "client_unavailable",
+  outcomeReason: "No authorized person was present",
+  statusCode: "incomplete"
+});
+assert.equal(closedIncomplete.outcomeCode, "client_unavailable");
+assert.equal(closedIncomplete.closedByUserId, "user-a");
+assert.equal(closedIncomplete.completedAt, null);

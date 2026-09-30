@@ -335,6 +335,18 @@ When connectivity returns, the application should synchronize changes.
 
 Conflicts must be detected rather than silently overwritten.
 
+## Field Execution Offline Synchronization
+
+Field execution offline behavior is part of the Field Visit / Actual Work workflow, not a separate domain architecture.
+
+The client may persist immutable field-execution operation envelopes locally when disconnected. Each envelope carries tenant context, actor identity, device ID, capture/action timestamps, a unique operation ID, payload, and a Field Visit version precondition when applicable.
+
+The backend exposes an authenticated field-execution synchronization boundary. Synchronization reuses the normal Field Visit and Actual Work services, permissions, tenant-scoped lookups, audit logging, and domain events. Operation IDs are idempotency keys; conflicting reuse of an operation ID is rejected. Field Visit version mismatches are conflicts and are never silently overwritten.
+
+The client removes only successfully applied or confirmed-duplicate operations. Conflicts and rejected operations remain visible locally so partially synchronized work is not lost or silently discarded.
+
+The initial implementation is deliberately limited to field execution. It does not introduce a general offline framework, background sync engine, attachment cache, or offline billing workflow.
+
 ## Client Portal Architecture
 
 The Client Portal should use restricted API access.

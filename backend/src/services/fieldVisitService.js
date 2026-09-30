@@ -67,6 +67,7 @@ class FieldVisitService {
     this.#requirePrincipal(principal);
     const visit = this.#getForPrincipal(principal, fieldVisitId);
     this.#authorize(principal, "fieldVisit:update", visit.organizationId);
+    this.#assertExpectedVersion(visit, expectedVersion);
     this.#ensureOpen(visit);
     if (visit.arrivedAt) throw new Error("Field visit has already recorded arrival");
 
@@ -77,7 +78,7 @@ class FieldVisitService {
     this.#saveAndRecord(principal, visit, "field-visit.arrived", { arrivedAt: null }, {
       arrivedAt: arrival,
       statusCode: visit.statusCode
-    });
+    }, arrival);
     return this.#clone(visit);
   }
 
@@ -96,7 +97,7 @@ class FieldVisitService {
     this.#saveAndRecord(principal, visit, "field-visit.started", { actualStartTime: null }, {
       actualStartTime: start,
       statusCode: visit.statusCode
-    });
+    }, start);
     return this.#clone(visit);
   }
 
@@ -117,7 +118,7 @@ class FieldVisitService {
     this.#saveAndRecord(principal, visit, "field-visit.stopped", { actualEndTime: null }, {
       actualEndTime: end,
       statusCode: visit.statusCode
-    });
+    }, end);
     return this.#clone(visit);
   }
 
@@ -139,7 +140,8 @@ class FieldVisitService {
     this.completionValidator({ visit, completionData, principal });
 
     visit.actualEndTime = end;
-    visit.completedAt = completedAt === null ? this.clock() : new Date(completedAt);\n    if (Number.isNaN(visit.completedAt.getTime())) throw new Error("completedAt must be a valid date");
+    visit.completedAt = completedAt === null ? this.clock() : new Date(completedAt);
+    if (Number.isNaN(visit.completedAt.getTime())) throw new Error("completedAt must be a valid date");
     visit.completedByUserId = principal.userId;
     visit.completionData = structuredClone(completionData);
     if (statusCode !== null) visit.statusCode = statusCode;
@@ -151,7 +153,7 @@ class FieldVisitService {
       completedAt: visit.completedAt,
       completedByUserId: principal.userId,
       statusCode: visit.statusCode
-    });
+    }, visit.completedAt);
     return this.#clone(visit);
   }
 
@@ -175,7 +177,8 @@ class FieldVisitService {
 
     visit.outcomeCode = outcomeCode;
     visit.outcomeReason = outcomeReason;
-    visit.closedAt = closedAt === null ? this.clock() : new Date(closedAt);\n    if (Number.isNaN(visit.closedAt.getTime())) throw new Error("closedAt must be a valid date");
+    visit.closedAt = closedAt === null ? this.clock() : new Date(closedAt);
+    if (Number.isNaN(visit.closedAt.getTime())) throw new Error("closedAt must be a valid date");
     visit.closedByUserId = principal.userId;
     if (statusCode !== null) visit.statusCode = statusCode;
     this.#saveAndRecord(principal, visit, "field-visit.closed_incomplete", {
@@ -187,7 +190,7 @@ class FieldVisitService {
       closedAt: visit.closedAt,
       closedByUserId: principal.userId,
       statusCode: visit.statusCode
-    });
+    }, visit.closedAt);
     return this.#clone(visit);
   }
 
@@ -238,10 +241,11 @@ class FieldVisitService {
     if (visit.completedAt || visit.closedAt) throw new Error("Field visit is already closed");
   }
 
-  #saveAndRecord(principal, visit, action, previousValue, newValue) {
+  #saveAndRecord(principal, visit, action, previousValue, newValue, occurredAt = this.clock()) {
+    visit.version += 1;
     this.fieldVisitStore.set(FieldVisitService.storageKey(visit.organizationId, visit.id), visit);
-    this.#audit(principal, action, visit.id, previousValue, newValue);
-    this.#emit(principal, action.replaceAll("-", "_"), visit);
+    this.#audit(principal, action, visit.id, previousValue, { ...newValue, version: visit.version }, occurredAt);
+    this.#emit(principal, action.replaceAll("-", "_"), visit, occurredAt);
   }
 
   #audit(principal, action, entityId, previousValue, newValue, createdAt = this.clock()) {
@@ -254,7 +258,8 @@ class FieldVisitService {
       entityType: "field_visit",
       entityId,
       previousValue,
-      newValue
+      newValue,
+      createdAt
     }));
   }
 
@@ -266,7 +271,9 @@ class FieldVisitService {
       eventType,
       entityType: "field_visit",
       entityId: visit.id,
+      occurredAt,
       payload: {
+        version: visit.version,
         appointmentId: visit.appointmentId,
         workOrderId: visit.workOrderId,
         resourceIds: visit.resourceIds,
@@ -291,6 +298,7 @@ class FieldVisitService {
     return new FieldVisit({
       id: visit.id,
       organizationId: visit.organizationId,
+      version: visit.version,
       appointmentId: visit.appointmentId,
       workOrderId: visit.workOrderId,
       statusCode: visit.statusCode,
@@ -310,7 +318,21 @@ class FieldVisitService {
       metadata: visit.metadata
     });
   }
-  #assertExpectedVersion(visit, expectedVersion) {\n    if (expectedVersion === null || expectedVersion === undefined) return;\n    if (!Number.isInteger(expectedVersion) || expectedVersion < 1) {\n      const error = new Error("expectedVersion must be a positive integer");\n      error.statusCode = 409;\n      throw error;\n    }\n    if (visit.version !== expectedVersion) {\n      const error = new Error("Field visit version conflict: expected " + expectedVersion + ", current " + visit.version);\n      error.statusCode = 409;\n      throw error;\n    }\n  }\n\n  #authorize(principal, action, organizationId) {
+  #assertExpectedVersion(visit, expectedVersion) {
+    if (expectedVersion === null || expectedVersion === undefined) return;
+    if (!Number.isInteger(expectedVersion) || expectedVersion < 1) {
+      const error = new Error("expectedVersion must be a positive integer");
+      error.statusCode = 409;
+      throw error;
+    }
+    if (visit.version !== expectedVersion) {
+      const error = new Error("Field visit version conflict: expected " + expectedVersion + ", current " + visit.version);
+      error.statusCode = 409;
+      throw error;
+    }
+  }
+
+  #authorize(principal, action, organizationId) {
     if (!this.authorize(principal, action, organizationId)) {
       const error = new Error("Not authorized");
       error.statusCode = 403;

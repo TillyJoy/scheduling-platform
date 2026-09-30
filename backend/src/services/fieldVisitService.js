@@ -86,6 +86,7 @@ class FieldVisitService {
     this.#requirePrincipal(principal);
     const visit = this.#getForPrincipal(principal, fieldVisitId);
     this.#authorize(principal, "fieldVisit:update", visit.organizationId);
+    this.#assertExpectedVersion(visit, expectedVersion);
     this.#ensureOpen(visit);
     if (visit.actualStartTime) throw new Error("Field visit has already started");
 
@@ -105,6 +106,7 @@ class FieldVisitService {
     this.#requirePrincipal(principal);
     const visit = this.#getForPrincipal(principal, fieldVisitId);
     this.#authorize(principal, "fieldVisit:update", visit.organizationId);
+    this.#assertExpectedVersion(visit, expectedVersion);
     this.#ensureOpen(visit);
     if (!visit.actualStartTime) throw new Error("Field visit must be started before it can stop");
     if (visit.actualEndTime) throw new Error("Field visit has already stopped");
@@ -126,6 +128,7 @@ class FieldVisitService {
     this.#requirePrincipal(principal);
     const visit = this.#getForPrincipal(principal, fieldVisitId);
     this.#authorize(principal, "fieldVisit:update", visit.organizationId);
+    this.#assertExpectedVersion(visit, expectedVersion);
     this.#ensureOpen(visit);
     if (!visit.actualStartTime) throw new Error("Field visit must be started before completion");
     if (visit.completedAt) throw new Error("Field visit is already completed");
@@ -161,6 +164,7 @@ class FieldVisitService {
     this.#requirePrincipal(principal);
     const visit = this.#getForPrincipal(principal, fieldVisitId);
     this.#authorize(principal, "fieldVisit:update", visit.organizationId);
+    this.#assertExpectedVersion(visit, expectedVersion);
     this.#ensureOpen(visit);
     if (!outcomeCode) throw new Error("outcomeCode is required");
     if (!outcomeReason) throw new Error("outcomeReason is required");

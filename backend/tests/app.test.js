@@ -247,6 +247,7 @@ test("authenticated field execution API records a visit and actual work", async 
     assert.equal(work.status, 201);
 
     const completed = await request(server, "POST", "/api/field-visits/visit-api-1/complete", {
+      actualEndTime: "2026-10-01T11:00:00Z",
       completionData: { requiredField: true },
       statusCode: "completed"
     }, auth);

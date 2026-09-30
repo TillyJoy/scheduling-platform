@@ -2,6 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { SchedulingService } = require("./services/schedulingService");
 const { AppointmentService } = require("./services/appointmentService");
+const { AuthenticationService } = require("./services/authenticationService");
 const { Resource } = require("./models/resource");
 const { Job } = require("./models/job");
 
@@ -75,7 +76,8 @@ function createAppState(seed = {}) {
     jobs,
     demoAvailability,
     schedulingService,
-    appointmentService
+    appointmentService,
+    authenticationService: seed.authenticationService || null
   };
 }
 
@@ -155,15 +157,32 @@ function ensureDemoAvailability(state, startTime) {
   });
 }
 
-function createHandler(state) {
+function createHandler(state, {
+  authenticationService = state.authenticationService,
+  allowDevelopmentBypass = process.env.NODE_ENV === "development"
+} = {}) {
   return async (req, res) => {
     try {
       const url = new URL(req.url, "http://localhost");
       const path = url.pathname;
-      const p = principal();
 
+      if (req.method === "GET" && path === "/health") {
+        return json(res, 200, { status: "ok", service: "scheduling-platform" });
+      }
       if (req.method === "GET" && FRONTEND_FILES[path]) {
         return staticFile(res, FRONTEND_FILES[path]);
+      }
+
+      let p;
+      if (allowDevelopmentBypass) {
+        p = principal();
+      } else {
+        if (!(authenticationService instanceof AuthenticationService)) {
+          const error = new Error("Authentication is not configured");
+          error.statusCode = 500;
+          throw error;
+        }
+        p = authenticationService.authenticateAuthorizationHeader(req.headers.authorization);
       }
 
       if (req.method === "GET" && path === "/api/jobs") {
@@ -219,9 +238,6 @@ function createHandler(state) {
           startTime: appointment.startTime.toISOString(),
           endTime: appointment.endTime.toISOString()
         });
-      }
-      if (req.method === "GET" && path === "/health") {
-        return json(res, 200, { status: "ok", service: "scheduling-platform" });
       }
       return json(res, 404, { error: "Route not found" });
     } catch (error) {

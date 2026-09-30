@@ -5,7 +5,7 @@ const {
   InMemoryOfflineOperationStore
 } = require("../../frontend/src/fieldExecutionOfflineQueue");
 
-function queue() {
+function makeQueue() {
   let now = new Date("2026-10-01T10:00:05Z");
   const store = new InMemoryOfflineOperationStore();
   return {
@@ -22,7 +22,7 @@ function queue() {
 }
 
 test("offline queue captures identity, device, and both timestamps before synchronization", async () => {
-  const { queue } = queue();
+  const { queue } = makeQueue();
   const operation = queue.createOperation({
     operationId: "op-1",
     operationType: "fieldVisit.arrive",
@@ -42,7 +42,7 @@ test("offline queue captures identity, device, and both timestamps before synchr
 });
 
 test("successful synchronization removes applied operations and retains partial failures", async () => {
-  const { queue } = queue();
+  const { queue } = makeQueue();
   await queue.enqueue(queue.createOperation({
     operationId: "op-applied",
     operationType: "fieldVisit.arrive",
@@ -74,7 +74,7 @@ test("successful synchronization removes applied operations and retains partial 
 });
 
 test("network failure leaves the queue unchanged for a later retry", async () => {
-  const { queue } = queue();
+  const { queue } = makeQueue();
   await queue.enqueue(queue.createOperation({
     operationId: "op-retry",
     operationType: "fieldVisit.start",
@@ -91,7 +91,7 @@ test("network failure leaves the queue unchanged for a later retry", async () =>
 });
 
 test("queue isolates operations by organization, actor, and device context", async () => {
-  const { queue, store } = queue();
+  const { queue, store } = makeQueue();
   await queue.enqueue(queue.createOperation({
     operationId: "op-private",
     operationType: "fieldVisit.arrive",

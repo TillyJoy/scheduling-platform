@@ -65,6 +65,15 @@ test("application exposes jobs, availability, and appointment conflict protectio
     assert.equal(updatedSlots.status, 200);
     assert.equal(updatedSlots.body.length, 0);
 
+    const fractionalDuration = await request(server, "POST", "/api/appointments", {
+      ...input,
+      id: "appointment-fractional-duration",
+      startTime: "2026-10-01T11:00:00Z",
+      endTime: "2026-10-01T12:00:30Z"
+    });
+    assert.equal(fractionalDuration.status, 400);
+    assert.equal(fractionalDuration.body.error, "Appointment duration must be a positive whole number of minutes");
+
     const crossOrg = await request(server, "POST", "/api/appointments", {
       ...input,
       id: "appointment-2",

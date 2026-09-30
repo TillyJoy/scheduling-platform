@@ -10,6 +10,7 @@ const { WorkOrderService } = require("./services/workOrderService");
 const { FieldVisitService } = require("./services/fieldVisitService");
 const { ActualWorkService } = require("./services/actualWorkService");
 const { DomainEventService } = require("./services/domainEventService");
+const { FieldExecutionSyncService } = require("./services/fieldExecutionSyncService");
 
 const MAX_BODY_BYTES = 1024 * 1024;
 const FRONTEND_FILES = {
@@ -35,6 +36,7 @@ function createAppState(seed = {}) {
   const actualWork = seed.actualWork || [];
   const auditEvents = seed.auditEvents || [];
   const domainEvents = seed.domainEvents || [];
+  const offlineOperations = seed.offlineOperations || new Map();
   const jobs = seed.jobs || [new Job({
     id: "job-1",
     organizationId: "demo-org",
@@ -98,6 +100,11 @@ function createAppState(seed = {}) {
     auditStore: auditEvents,
     domainEventService
   });
+  const fieldExecutionSyncService = new FieldExecutionSyncService({
+    fieldVisitService,
+    actualWorkService,
+    operationStore: offlineOperations
+  });
 
   return {
     resources,
@@ -115,6 +122,7 @@ function createAppState(seed = {}) {
     workOrderService,
     fieldVisitService,
     actualWorkService,
+    fieldExecutionSyncService,
     domainEventService,
     demoAvailability,
     schedulingService,
@@ -127,7 +135,7 @@ function principal() {
   return {
     userId: "demo-user",
     organizationId: "demo-org",
-    permissions: ["appointment:create", "appointment:read", "appointment:confirm", "appointment:cancel", "fieldVisit:create", "fieldVisit:read", "fieldVisit:update", "actualWork:create", "actualWork:read"]
+    permissions: ["appointment:create", "appointment:read", "appointment:confirm", "appointment:cancel", "fieldVisit:create", "fieldVisit:read", "fieldVisit:update", "actualWork:create", "actualWork:read", "fieldExecution:sync"]
   };
 }
 
@@ -281,6 +289,25 @@ function createHandler(state, {
           startTime: slot.startTime.toISOString(),
           endTime: slot.endTime.toISOString()
         })));
+      }
+      if (req.method === "POST" && path === "/api/field-execution/sync") {
+        const input = await readBody(req);
+        if (!input || typeof input !== "object" || Array.isArray(input)) {
+          return json(res, 400, { error: "Request body must be a JSON object" });
+        }
+        const results = state.fieldExecutionSyncService.sync({
+          principal: p,
+          operations: input.operations
+        });
+        return json(res, 200, {
+          results,
+          summary: {
+            applied: results.filter(result => result.status === "applied").length,
+            duplicate: results.filter(result => result.status === "duplicate").length,
+            conflicts: results.filter(result => result.status === "conflict").length,
+            rejected: results.filter(result => result.status === "rejected").length
+          }
+        });
       }
       if (req.method === "GET" && path === "/api/field-visits") {
         const visits = state.fieldVisitService.list({

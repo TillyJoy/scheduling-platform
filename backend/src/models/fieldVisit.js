@@ -20,7 +20,7 @@ class FieldVisit {
     completionData = {},
     metadata = {}
   }) {
-    if (!id) throw new Error("id is required");
+    if (!id) throw new Error("id is required");\n    if (!Number.isInteger(version) || version < 1) throw new Error("version must be a positive integer");
     if (!organizationId) throw new Error("organizationId is required");
     if (!appointmentId) throw new Error("appointmentId is required");
     if (!workOrderId) throw new Error("workOrderId is required");

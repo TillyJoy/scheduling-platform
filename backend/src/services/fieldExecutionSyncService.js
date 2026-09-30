@@ -14,6 +14,7 @@ class FieldExecutionSyncService {
     this.#requirePrincipal(principal);
     this.#authorize(principal, "fieldExecution:sync", principal.organizationId);
     if (!Array.isArray(operations)) throw new Error("operations must be an array");
+    if (operations.length > 100) { const error = new Error("A synchronization batch cannot contain more than 100 operations"); error.statusCode = 413; throw error; }
     return operations.map(operation => this.#applyOne(principal, operation));
   }
 
@@ -83,7 +84,8 @@ class FieldExecutionSyncService {
     if (!Number.isInteger(operation.expectedVersion) || operation.expectedVersion < 1) {
       throw FieldExecutionSyncService.conflict("A valid expectedVersion is required for field visit changes");
     }
-    const visit = this.fieldVisitService.get({ principal, fieldVisitId: operation.fieldVisitId });
+    const visit = this.fieldVisitService.getForOrganization({ organizationId: principal.organizationId, fieldVisitId: operation.fieldVisitId });
+    if (!visit) throw FieldExecutionSyncService.conflict("Field visit not found");
     if (visit.version !== operation.expectedVersion) {
       throw FieldExecutionSyncService.conflict(`Field visit version conflict: expected ${operation.expectedVersion}, current ${visit.version}`);
     }

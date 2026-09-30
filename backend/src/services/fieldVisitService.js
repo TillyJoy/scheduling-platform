@@ -324,6 +324,12 @@ class FieldVisitService {
     }
   }
 
+  static defaultAuthorize(principal, action, organizationId) {
+    return principal.organizationId === organizationId
+      && Array.isArray(principal.permissions)
+      && principal.permissions.includes(action);
+  }
+
 }
 
 module.exports = { FieldVisitService };

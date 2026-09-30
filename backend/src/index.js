@@ -1,36 +1,12 @@
 const http = require("http");
-const { healthCheck } = require("./health");
-const { getDatabaseConfig } = require("./database");
+const { createAppState, createHandler } = require("./app");
 
-const PORT = process.env.PORT || 3000;
-
-const server = http.createServer((req, res) => {
-  if (req.url === "/health") {
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify(healthCheck()));
-    return;
-  }
-
-  if (req.url === "/database") {
-    const config = getDatabaseConfig();
-
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(
-      JSON.stringify({
-        configured: Boolean(config.databaseUrl)
-      })
-    );
-    return;
-  }
-
-  res.writeHead(404, { "Content-Type": "application/json" });
-  res.end(
-    JSON.stringify({
-      error: "Route not found"
-    })
-  );
-});
+const PORT = Number(process.env.PORT || 3000);
+const state = createAppState();
+const server = http.createServer(createHandler(state));
 
 server.listen(PORT, () => {
   console.log(`Scheduling Platform API listening on port ${PORT}`);
 });
+
+module.exports = { server, state };

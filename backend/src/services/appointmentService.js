@@ -21,7 +21,7 @@ class AppointmentService {
     this.statusResolver = statusResolver;
   }
 
-  create({ principal, ...input }) {
+  create({ principal, enforceAvailability = false, ...input }) {
     this.#requirePrincipal(principal);
 
     const appointmentInput = { ...input };
@@ -42,8 +42,13 @@ class AppointmentService {
 
     const appointment = new Appointment(appointmentInput);
     const key = this.#key(appointment.organizationId, appointment.id);
-    if (this.appointmentStore.has(key)) throw new Error("Appointment ID already exists");
+    if (this.appointmentStore.has(key)) {
+      const error = new Error("Appointment ID already exists");
+      error.statusCode = 409;
+      throw error;
+    }
     this.#assertResourcesAvailable(appointment);
+    if (enforceAvailability) this.#assertExactAvailability(appointment);
     this.appointmentStore.set(key, appointment);
     return appointment;
   }
@@ -83,27 +88,14 @@ class AppointmentService {
       throw new Error("Appointment ID already exists");
     }
 
-    if (this.schedulingService) {
-      for (const memberId of memberIds) {
-        const durationMinutes = (end.getTime() - start.getTime()) / 60000;
-        const slots = this.schedulingService.findAvailableSlots({
-          organizationId,
-          resourceIds: [memberId],
-          serviceIds,
-          teamId,
-          startTime: start,
-          endTime: end,
-          durationMinutes,
-          slotMinutes: durationMinutes
-        });
-        const exact = slots.some(slot =>
-          slot.resourceId === memberId &&
-          slot.startTime.getTime() === start.getTime() &&
-          slot.endTime.getTime() === end.getTime()
-        );
-        if (!exact) throw new Error("Requested appointment slot is no longer available");
-      }
-    }
+    this.#assertExactAvailability({
+      organizationId,
+      serviceIds,
+      teamId,
+      memberIds,
+      startTime: start,
+      endTime: end
+    });
 
     const hold = {
       id,
@@ -191,15 +183,63 @@ class AppointmentService {
       .sort((a, b) => a.startTime - b.startTime);
   }
 
+  #assertExactAvailability(candidate) {
+    if (!this.schedulingService) {
+      const error = new Error("Scheduling availability is required to create an appointment");
+      error.statusCode = 500;
+      throw error;
+    }
+    if (!Array.isArray(candidate.memberIds) || candidate.memberIds.length === 0) {
+      const error = new Error("memberIds must not be empty");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const durationMinutes = (candidate.endTime.getTime() - candidate.startTime.getTime()) / 60000;
+    if (!Number.isInteger(durationMinutes) || durationMinutes <= 0) {
+      const error = new Error("Appointment duration must be a positive whole number of minutes");
+      error.statusCode = 400;
+      throw error;
+    }
+    for (const memberId of candidate.memberIds) {
+      const slots = this.schedulingService.findAvailableSlots({
+        organizationId: candidate.organizationId,
+        resourceIds: [memberId],
+        serviceIds: candidate.serviceIds,
+        teamId: candidate.teamId,
+        startTime: candidate.startTime,
+        endTime: candidate.endTime,
+        durationMinutes,
+        slotMinutes: durationMinutes
+      });
+      const exact = slots.some(slot =>
+        slot.resourceId === memberId &&
+        slot.startTime.getTime() === candidate.startTime.getTime() &&
+        slot.endTime.getTime() === candidate.endTime.getTime()
+      );
+      if (!exact) {
+        const error = new Error("Requested appointment slot is not available");
+        error.statusCode = 409;
+        throw error;
+      }
+    }
+  }
+
   #assertResourcesAvailable(candidate) {
     for (const existing of this.appointmentStore.values()) {
       if (existing.organizationId !== candidate.organizationId) continue;
       if (!this.#consumesAppointment(existing)) continue;
       if (existing.endTime <= candidate.startTime || existing.startTime >= candidate.endTime) continue;
       const conflict = candidate.memberIds.some(id => existing.memberIds.includes(id));
-      if (conflict) throw new Error("Resource is already assigned to an overlapping appointment");
+      if (conflict) {
+        const error = new Error("Resource is already assigned to an overlapping appointment");
+        error.statusCode = 409;
+        throw error;
+      }
       if (candidate.teamId && candidate.teamId === existing.teamId) {
-        throw new Error("Team is already assigned to an overlapping appointment");
+        const error = new Error("Team is already assigned to an overlapping appointment");
+        error.statusCode = 409;
+        throw error;
       }
     }
   }

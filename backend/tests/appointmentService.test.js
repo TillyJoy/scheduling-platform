@@ -74,7 +74,7 @@ assert.throws(() => service.createHold({
   startTime: "2026-10-01T09:30:00Z",
   endTime: "2026-10-01T10:30:00Z",
   expiresAt: "2026-10-01T08:15:00Z"
-}), /no longer available/);
+}), /Requested appointment slot is not available/);
 
 const appointment = service.confirmHold({ principal, holdId: "hold-1" });
 assert.equal(appointment.status, "scheduled");
@@ -108,7 +108,7 @@ assert.throws(() => service.createHold({
   startTime: "2026-10-01T09:30:00Z",
   endTime: "2026-10-01T10:30:00Z",
   expiresAt: "2026-10-01T08:15:00Z"
-}), /no longer available/);
+}), /Requested appointment slot is not available/);
 
 assert.throws(() => service.get({ principal: otherOrg, appointmentId: "hold-1" }), /Appointment not found/);
 

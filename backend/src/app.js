@@ -1,9 +1,16 @@
+const fs = require("node:fs");
+const path = require("node:path");
 const { SchedulingService } = require("./services/schedulingService");
 const { AppointmentService } = require("./services/appointmentService");
 const { Resource } = require("./models/resource");
 const { Job } = require("./models/job");
 
 const MAX_BODY_BYTES = 1024 * 1024;
+const FRONTEND_FILES = {
+  "/": { file: "index.html", contentType: "text/html; charset=utf-8" },
+  "/app.js": { file: "app.js", contentType: "text/javascript; charset=utf-8" }
+};
+const FRONTEND_DIR = path.resolve(__dirname, "../../frontend/src");
 
 function createAppState(seed = {}) {
   const resources = seed.resources || [new Resource({
@@ -80,6 +87,24 @@ function principal() {
   };
 }
 
+function staticFile(res, fileConfig) {
+  const filePath = path.resolve(FRONTEND_DIR, fileConfig.file);
+  if (!filePath.startsWith(FRONTEND_DIR + path.sep)) {
+    return json(res, 404, { error: "Route not found" });
+  }
+  try {
+    const body = fs.readFileSync(filePath);
+    res.writeHead(200, {
+      "Content-Type": fileConfig.contentType,
+      "Cache-Control": "no-cache"
+    });
+    res.end(body);
+    return true;
+  } catch {
+    return json(res, 404, { error: "Frontend asset not found" });
+  }
+}
+
 function json(res, status, body) {
   res.writeHead(status, {
     "Content-Type": "application/json; charset=utf-8",
@@ -136,6 +161,10 @@ function createHandler(state) {
       const url = new URL(req.url, "http://localhost");
       const path = url.pathname;
       const p = principal();
+
+      if (req.method === "GET" && FRONTEND_FILES[path]) {
+        return staticFile(res, FRONTEND_FILES[path]);
+      }
 
       if (req.method === "GET" && path === "/api/jobs") {
         return json(res, 200, state.jobs.filter(job => job.organizationId === p.organizationId));

@@ -1,7 +1,39 @@
+test("application serves the scheduler shell and frontend asset", async () => {
+  const server = http.createServer(createHandler(createAppState()));
+  await new Promise(resolve => server.listen(0, resolve));
+  try {
+    const page = await requestText(server, "GET", "/");
+    assert.equal(page.status, 200);
+    assert.match(page.headers["content-type"], /^text\/html/);
+    assert.match(page.body, /<title>Scheduling Platform<\/title>/);
+    assert.match(page.body, /<script src="\.\/app\.js"><\/script>/);
+
+    const script = await requestText(server, "GET", "/app.js");
+    assert.equal(script.status, 200);
+    assert.match(script.headers["content-type"], /^text\/javascript/);
+    assert.match(script.body, /\/api\/availability/);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const http = require("http");
 const { createAppState, createHandler } = require("../src/app");
+
+function requestText(server, method, path) {
+  return new Promise((resolve, reject) => {
+    const address = server.address();
+    const req = http.request({ hostname: "127.0.0.1", port: address.port, method, path }, res => {
+      let data = "";
+      res.on("data", chunk => data += chunk);
+      res.on("end", () => resolve({ status: res.statusCode, headers: res.headers, body: data }));
+    });
+    req.on("error", reject);
+    req.end();
+  });
+}
 
 function request(server, method, path, body) {
   return new Promise((resolve, reject) => {

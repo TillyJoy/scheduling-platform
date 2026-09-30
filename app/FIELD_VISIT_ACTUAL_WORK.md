@@ -127,3 +127,46 @@ Field Visit lifecycle changes and Actual Work creation emit domain events throug
 ### Current persistence boundary
 
 The implementation remains in-memory, consistent with the repository's current service architecture. Durable persistence and transactional event/outbox coupling remain later infrastructure work.
+
+
+## Offline execution foundation
+
+Offline field execution uses the same Field Visit and Actual Work services rather than a parallel domain model.
+
+A field client records an immutable operation envelope containing:
+
+- organization context
+- authenticated actor identity
+- device identifier
+- unique operation ID
+- capture timestamp
+- action/occurrence timestamp
+- operation type
+- Field Visit expected version when changing an existing visit
+- operation payload
+
+The browser implementation persists pending operations in an IndexedDB-backed queue. Queue records are scoped by organization, actor, and device. Write transactions request strict durability where supported by the browser.
+
+Synchronization uses the authenticated API endpoint:
+
+- `POST /api/field-execution/sync`
+
+The server:
+
+- authenticates the current principal
+- requires the `fieldExecution:sync` permission
+- validates the operation actor and organization against the authenticated principal
+- dispatches only supported Field Visit / Actual Work operations
+- reuses the existing domain services and authorization checks
+- preserves the client action timestamp for execution timestamps, audit records, and domain events
+- deduplicates by organization + operation ID and rejects reuse of an ID with different content
+- uses Field Visit version preconditions to detect stale offline changes
+- returns per-operation applied, duplicate, conflict, or rejected results so a batch can partially synchronize safely
+
+Applied and duplicate operations are removed from the local queue. Conflicts and rejected operations remain locally marked for explicit resolution rather than being silently retried or overwritten.
+
+This is intentionally not a general synchronization framework. It covers only the field-execution actions currently required by the platform.
+
+### Current boundary
+
+The offline foundation is reliable within the current service architecture, but the server-side operation ledger and domain data are still in-memory. Durable server persistence and transactional coupling of replayed domain changes with the event outbox remain infrastructure work before production deployment.

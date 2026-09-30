@@ -23,7 +23,7 @@ class FieldVisitService {
     this.completionValidator = completionValidator;
   }
 
-  create({ principal, ...input }) {
+  create({ principal, occurredAt = null, ...input }) {
     this.#requirePrincipal(principal);
     this.#authorize(principal, "fieldVisit:create", principal.organizationId);
 
@@ -57,16 +57,19 @@ class FieldVisitService {
     const key = FieldVisitService.storageKey(visit.organizationId, visit.id);
     if (this.fieldVisitStore.has(key)) throw new Error("Field visit ID already exists");
 
+    const eventTime = occurredAt === null ? this.clock() : new Date(occurredAt);
+    if (Number.isNaN(eventTime.getTime())) throw new Error("occurredAt must be a valid date");
     this.fieldVisitStore.set(key, visit);
-    this.#audit(principal, "field-visit.created", visit.id, null, visit);
-    this.#emit(principal, "field_visit.created", visit);
+    this.#audit(principal, "field-visit.created", visit.id, null, visit, eventTime);
+    this.#emit(principal, "field_visit.created", visit, eventTime);
     return this.#clone(visit);
   }
 
-  arrive({ principal, fieldVisitId, arrivedAt = null, statusCode = null } = {}) {
+  arrive({ principal, fieldVisitId, arrivedAt = null, statusCode = null, expectedVersion = null } = {}) {
     this.#requirePrincipal(principal);
     const visit = this.#getForPrincipal(principal, fieldVisitId);
     this.#authorize(principal, "fieldVisit:update", visit.organizationId);
+    this.#assertExpectedVersion(visit, expectedVersion);
     this.#ensureOpen(visit);
     if (visit.arrivedAt) throw new Error("Field visit has already recorded arrival");
 
@@ -77,14 +80,15 @@ class FieldVisitService {
     this.#saveAndRecord(principal, visit, "field-visit.arrived", { arrivedAt: null }, {
       arrivedAt: arrival,
       statusCode: visit.statusCode
-    });
+    }, arrival);
     return this.#clone(visit);
   }
 
-  start({ principal, fieldVisitId, actualStartTime = null, statusCode = null } = {}) {
+  start({ principal, fieldVisitId, actualStartTime = null, statusCode = null, expectedVersion = null } = {}) {
     this.#requirePrincipal(principal);
     const visit = this.#getForPrincipal(principal, fieldVisitId);
     this.#authorize(principal, "fieldVisit:update", visit.organizationId);
+    this.#assertExpectedVersion(visit, expectedVersion);
     this.#ensureOpen(visit);
     if (visit.actualStartTime) throw new Error("Field visit has already started");
 
@@ -96,14 +100,15 @@ class FieldVisitService {
     this.#saveAndRecord(principal, visit, "field-visit.started", { actualStartTime: null }, {
       actualStartTime: start,
       statusCode: visit.statusCode
-    });
+    }, start);
     return this.#clone(visit);
   }
 
-  stop({ principal, fieldVisitId, actualEndTime = null, statusCode = null } = {}) {
+  stop({ principal, fieldVisitId, actualEndTime = null, statusCode = null, expectedVersion = null } = {}) {
     this.#requirePrincipal(principal);
     const visit = this.#getForPrincipal(principal, fieldVisitId);
     this.#authorize(principal, "fieldVisit:update", visit.organizationId);
+    this.#assertExpectedVersion(visit, expectedVersion);
     this.#ensureOpen(visit);
     if (!visit.actualStartTime) throw new Error("Field visit must be started before it can stop");
     if (visit.actualEndTime) throw new Error("Field visit has already stopped");
@@ -117,14 +122,15 @@ class FieldVisitService {
     this.#saveAndRecord(principal, visit, "field-visit.stopped", { actualEndTime: null }, {
       actualEndTime: end,
       statusCode: visit.statusCode
-    });
+    }, end);
     return this.#clone(visit);
   }
 
-  complete({ principal, fieldVisitId, actualEndTime = null, completionData = {}, statusCode = null } = {}) {
+  complete({ principal, fieldVisitId, actualEndTime = null, completionData = {}, statusCode = null, expectedVersion = null, completedAt = null } = {}) {
     this.#requirePrincipal(principal);
     const visit = this.#getForPrincipal(principal, fieldVisitId);
     this.#authorize(principal, "fieldVisit:update", visit.organizationId);
+    this.#assertExpectedVersion(visit, expectedVersion);
     this.#ensureOpen(visit);
     if (!visit.actualStartTime) throw new Error("Field visit must be started before completion");
     if (visit.completedAt) throw new Error("Field visit is already completed");
@@ -139,7 +145,8 @@ class FieldVisitService {
     this.completionValidator({ visit, completionData, principal });
 
     visit.actualEndTime = end;
-    visit.completedAt = this.clock();
+    visit.completedAt = completedAt === null ? this.clock() : new Date(completedAt);
+    if (Number.isNaN(visit.completedAt.getTime())) throw new Error("completedAt must be a valid date");
     visit.completedByUserId = principal.userId;
     visit.completionData = structuredClone(completionData);
     if (statusCode !== null) visit.statusCode = statusCode;
@@ -151,14 +158,15 @@ class FieldVisitService {
       completedAt: visit.completedAt,
       completedByUserId: principal.userId,
       statusCode: visit.statusCode
-    });
+    }, visit.completedAt);
     return this.#clone(visit);
   }
 
-  closeIncomplete({ principal, fieldVisitId, outcomeCode, outcomeReason, actualEndTime = null, statusCode = null } = {}) {
+  closeIncomplete({ principal, fieldVisitId, outcomeCode, outcomeReason, actualEndTime = null, statusCode = null, expectedVersion = null, closedAt = null } = {}) {
     this.#requirePrincipal(principal);
     const visit = this.#getForPrincipal(principal, fieldVisitId);
     this.#authorize(principal, "fieldVisit:update", visit.organizationId);
+    this.#assertExpectedVersion(visit, expectedVersion);
     this.#ensureOpen(visit);
     if (!outcomeCode) throw new Error("outcomeCode is required");
     if (!outcomeReason) throw new Error("outcomeReason is required");
@@ -175,7 +183,8 @@ class FieldVisitService {
 
     visit.outcomeCode = outcomeCode;
     visit.outcomeReason = outcomeReason;
-    visit.closedAt = this.clock();
+    visit.closedAt = closedAt === null ? this.clock() : new Date(closedAt);
+    if (Number.isNaN(visit.closedAt.getTime())) throw new Error("closedAt must be a valid date");
     visit.closedByUserId = principal.userId;
     if (statusCode !== null) visit.statusCode = statusCode;
     this.#saveAndRecord(principal, visit, "field-visit.closed_incomplete", {
@@ -187,7 +196,7 @@ class FieldVisitService {
       closedAt: visit.closedAt,
       closedByUserId: principal.userId,
       statusCode: visit.statusCode
-    });
+    }, visit.closedAt);
     return this.#clone(visit);
   }
 
@@ -238,13 +247,14 @@ class FieldVisitService {
     if (visit.completedAt || visit.closedAt) throw new Error("Field visit is already closed");
   }
 
-  #saveAndRecord(principal, visit, action, previousValue, newValue) {
+  #saveAndRecord(principal, visit, action, previousValue, newValue, occurredAt = this.clock()) {
+    visit.version = (Number.isInteger(visit.version) ? visit.version : 1) + 1;
     this.fieldVisitStore.set(FieldVisitService.storageKey(visit.organizationId, visit.id), visit);
-    this.#audit(principal, action, visit.id, previousValue, newValue);
-    this.#emit(principal, action.replaceAll("-", "_"), visit);
+    this.#audit(principal, action, visit.id, previousValue, { ...newValue, version: visit.version }, occurredAt);
+    this.#emit(principal, action.replaceAll("-", "_"), visit, occurredAt);
   }
 
-  #audit(principal, action, entityId, previousValue, newValue) {
+  #audit(principal, action, entityId, previousValue, newValue, createdAt = this.clock()) {
     const { AuditEvent } = require("../models/auditEvent");
     this.auditStore.push(new AuditEvent({
       id: action + ":" + entityId + ":" + (this.auditStore.length + 1),
@@ -254,11 +264,12 @@ class FieldVisitService {
       entityType: "field_visit",
       entityId,
       previousValue,
-      newValue
+      newValue,
+      createdAt
     }));
   }
 
-  #emit(principal, eventType, visit) {
+  #emit(principal, eventType, visit, occurredAt = this.clock()) {
     if (!this.domainEventService) return;
     this.domainEventService.emit({
       principal,
@@ -266,7 +277,9 @@ class FieldVisitService {
       eventType,
       entityType: "field_visit",
       entityId: visit.id,
+      occurredAt,
       payload: {
+        version: visit.version,
         appointmentId: visit.appointmentId,
         workOrderId: visit.workOrderId,
         resourceIds: visit.resourceIds,
@@ -291,6 +304,7 @@ class FieldVisitService {
     return new FieldVisit({
       id: visit.id,
       organizationId: visit.organizationId,
+      version: visit.version,
       appointmentId: visit.appointmentId,
       workOrderId: visit.workOrderId,
       statusCode: visit.statusCode,
@@ -310,6 +324,20 @@ class FieldVisitService {
       metadata: visit.metadata
     });
   }
+  #assertExpectedVersion(visit, expectedVersion) {
+    if (expectedVersion === null || expectedVersion === undefined) return;
+    if (!Number.isInteger(expectedVersion) || expectedVersion < 1) {
+      const error = new Error("expectedVersion must be a positive integer");
+      error.statusCode = 409;
+      throw error;
+    }
+    if (visit.version !== expectedVersion) {
+      const error = new Error("Field visit version conflict: expected " + expectedVersion + ", current " + visit.version);
+      error.statusCode = 409;
+      throw error;
+    }
+  }
+
   #authorize(principal, action, organizationId) {
     if (!this.authorize(principal, action, organizationId)) {
       const error = new Error("Not authorized");

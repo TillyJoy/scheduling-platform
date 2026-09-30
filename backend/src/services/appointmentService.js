@@ -178,6 +178,11 @@ class AppointmentService {
     }
 
     const durationMinutes = (candidate.endTime.getTime() - candidate.startTime.getTime()) / 60000;
+    if (!Number.isInteger(durationMinutes) || durationMinutes <= 0) {
+      const error = new Error("Appointment duration must be a positive whole number of minutes");
+      error.statusCode = 400;
+      throw error;
+    }
     for (const memberId of candidate.memberIds) {
       const slots = this.schedulingService.findAvailableSlots({
         organizationId: candidate.organizationId,

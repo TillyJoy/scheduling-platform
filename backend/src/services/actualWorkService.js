@@ -121,7 +121,11 @@ class ActualWorkService {
   }
 
   #authorize(principal, action, organizationId) {
-    if (!this.authorize(principal, action, organizationId)) throw new Error("Not authorized");
+    if (!this.authorize(principal, action, organizationId)) {
+      const error = new Error("Not authorized");
+      error.statusCode = 403;
+      throw error;
+    }
   }
 
   #requirePrincipal(principal) {

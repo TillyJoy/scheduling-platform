@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const {
   FieldExecutionOfflineQueue,
   InMemoryOfflineOperationStore
-} = require("../frontend/src/fieldExecutionOfflineQueue");
+} = require("../../frontend/src/fieldExecutionOfflineQueue");
 
 function queue() {
   let now = new Date("2026-10-01T10:00:05Z");

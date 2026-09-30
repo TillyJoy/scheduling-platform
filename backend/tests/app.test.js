@@ -182,7 +182,8 @@ test("authenticated field execution API records a visit and actual work", async 
       "fieldVisit:read",
       "fieldVisit:update",
       "actualWork:create",
-      "actualWork:read"
+      "actualWork:read",
+      "event:emit"
     ]
   });
   const workOrder = new WorkOrder({

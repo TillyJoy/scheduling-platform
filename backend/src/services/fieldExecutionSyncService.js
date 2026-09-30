@@ -38,7 +38,19 @@ class FieldExecutionSyncService {
 
     try {
       const result = this.#dispatch(principal, normalized);
-      const stored = { fingerprint, result: this.#summarizeResult(result) };
+      const stored = {
+        fingerprint,
+        operation: {
+          operationId: normalized.operationId,
+          operationType: normalized.operationType,
+          actorUserId: normalized.actorUserId,
+          deviceId: normalized.deviceId,
+          capturedAt: normalized.capturedAt,
+          occurredAt: normalized.occurredAt,
+          fieldVisitId: normalized.fieldVisitId
+        },
+        result: this.#summarizeResult(result)
+      };
       this.operationStore.set(key, stored);
       return { operationId: normalized.operationId, status: "applied", result: stored.result };
     } catch (error) {

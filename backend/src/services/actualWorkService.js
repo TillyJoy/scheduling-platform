@@ -17,7 +17,7 @@ class ActualWorkService {
     this.authorize = authorize;
   }
 
-  create({ principal, ...input }) {
+  create({ principal, occurredAt = null, ...input }) {
     this.#requirePrincipal(principal);
     this.#authorize(principal, "actualWork:create", principal.organizationId);
 

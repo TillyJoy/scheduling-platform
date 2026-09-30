@@ -50,6 +50,7 @@ class NotificationEventProcessor {
             ruleId: rule.id,
             eventId: event.id,
             recipientId,
+            deliveryKey: [event.id, rule.id, template.id, recipientId].join(":"),
             channel: template.channel,
             status: "queued"
           };
@@ -66,7 +67,9 @@ class NotificationEventProcessor {
               type: "event",
               relatedEntityType: event.entityType,
               relatedEntityId: event.entityId,
+              sourceEventId: event.id,
               sourceEventType: event.eventType,
+              deliveryKey: result.deliveryKey,
               requiresAcknowledgement: rule.required
             });
             result.status = "created";

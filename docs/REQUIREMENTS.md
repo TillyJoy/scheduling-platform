@@ -966,3 +966,20 @@ Potential future features include:
 - White-label agency deployments
 - Commercial licensing
 - Multi-agency SaaS deployment
+
+
+# 41. Capacity and Durable Persistence
+
+The platform must support an organization with at least hundreds of active and pending client records at launch, with an engineering target of approximately 1,000–5,000 active/pending client records per organization without fundamental architectural redesign. Historical records must remain queryable beyond that range.
+
+Capacity must be achieved through:
+
+- Durable relational database persistence for authoritative records
+- Tenant-scoped indexes and row-level isolation
+- Bounded, paginated reads rather than unbounded collection loads
+- Bounded scheduling queries for time/resource windows
+- Asynchronous processing for notifications, integrations, synchronization, and other non-interactive work
+- Incremental integration synchronization rather than full-dataset replacement on every cycle
+- Historical retention without requiring active-record tables to remain artificially small
+
+The application must not depend on in-memory stores as the authoritative persistence mechanism for launch-critical records.

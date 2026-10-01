@@ -671,3 +671,22 @@ Implemented:
 Domain services still use their existing in-memory stores. This batch intentionally establishes the persistence/security boundary before incrementally moving individual services behind repositories.
 
 The application role must not rely on client-supplied tenant identifiers for authorization. API principals establish the trusted organization context before database work is performed.
+
+
+## Capacity and query discipline
+
+The launch capacity target is hundreds of active/pending client records per organization, with an engineering target of approximately 1,000–5,000 active/pending client records per organization without fundamental architectural redesign. Historical records must remain queryable beyond that range.
+
+Durable persistence is implemented incrementally behind the existing domain architecture. The first high-volume vertical slice is Client persistence through ClientRepository, using the trusted organization context established by the authenticated principal.
+
+The client persistence path uses:
+
+- PostgreSQL as the authoritative store
+- Organization-scoped indexes
+- Keyset pagination ordered by created_at DESC, id DESC
+- A bounded page size of 100 records
+- Tenant predicates in repository queries in addition to database RLS
+
+This is intentionally not a general repository framework. Additional entities should move to durable repositories incrementally when their workflow requires it.
+
+Scheduling queries must remain bounded by time/resource windows; background processing and incremental integration synchronization remain the mechanisms for work that should not block interactive requests.

@@ -50,11 +50,15 @@ class NotificationEventProcessor {
             ruleId: rule.id,
             eventId: event.id,
             recipientId,
+            deliveryKey: [event.id, rule.id, template.id, recipientId].join(":"),
             channel: template.channel,
             status: "queued"
           };
 
           if (template.channel === "in_app") {
+            const existingNotification = [...this.notificationService.notificationStore.values()].find(candidate =>
+              candidate.organizationId === event.organizationId && candidate.deliveryKey === result.deliveryKey
+            );
             const notification = this.notificationService.create({
               principal,
               id: result.id,
@@ -66,10 +70,12 @@ class NotificationEventProcessor {
               type: "event",
               relatedEntityType: event.entityType,
               relatedEntityId: event.entityId,
+              sourceEventId: event.id,
               sourceEventType: event.eventType,
+              deliveryKey: result.deliveryKey,
               requiresAcknowledgement: rule.required
             });
-            result.status = "created";
+            result.status = existingNotification ? "deduplicated" : "created";
             result.notificationId = notification.id;
           } else if (this.deliverySink) {
             this.deliverySink({ ...result, organizationId: event.organizationId, subject: rendered.subject, body: rendered.body, event });

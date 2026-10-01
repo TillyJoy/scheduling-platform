@@ -648,3 +648,26 @@ The database architecture should support:
 - Multiple external integrations
 - Mobile applications
 - Future standalone commercial deployments
+
+
+## Implemented persistence foundation
+
+The repository now has the first secure PostgreSQL persistence boundary without migrating the domain services in one step.
+
+Implemented:
+
+- PostgreSQL connection pooling through `DATABASE_URL`
+- TLS verification enabled by default; insecure transport must be explicitly opted out
+- bounded pool and connection/idle timeouts
+- explicit transaction helper
+- transaction-local trusted organization, user, and action context
+- ordered SQL migrations with a migration ledger
+- organization-scoped row-level security (RLS) with forced RLS
+- append-only audit event protection
+- durable domain-event and event-outbox primitives
+- durable notification delivery-key uniqueness
+- durable field-execution operation idempotency storage
+
+Domain services still use their existing in-memory stores. This batch intentionally establishes the persistence/security boundary before incrementally moving individual services behind repositories.
+
+The application role must not rely on client-supplied tenant identifiers for authorization. API principals establish the trusted organization context before database work is performed.

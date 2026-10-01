@@ -389,3 +389,18 @@ The authentication boundary does not yet constitute the complete production iden
 - Rate limiting and abuse controls
 - Authentication security monitoring
 - Production key rotation and secret-management integration
+
+
+## Current Database Security Foundation
+
+The first PostgreSQL persistence boundary is implemented with:
+
+- server-side `DATABASE_URL` configuration
+- TLS certificate verification by default
+- transaction-scoped trusted organization/user/action context
+- PostgreSQL row-level security with forced RLS on organization-scoped foundation tables
+- append-only audit-event protection
+- unique organization-scoped notification delivery keys
+- unique organization-scoped field-execution operation IDs for replay safety
+
+The database layer must receive organization context from the authenticated backend principal. Client-supplied organization headers are not a substitute for authorization.

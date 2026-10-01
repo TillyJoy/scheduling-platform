@@ -83,7 +83,7 @@ class ClientRepository {
 
     return {
       items: rows.map(row => this.#map(row)),
-      nextCursor: hasMore ? { createdAt: last.createdAt, id: last.id } : null,
+      nextCursor: hasMore ? { createdAt: last.created_at, id: last.id } : null,
       hasMore
     };
   }

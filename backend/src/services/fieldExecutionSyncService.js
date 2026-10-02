@@ -158,19 +158,19 @@ class FieldExecutionSyncService {
         if (operation.expectedVersion !== null) throw FieldExecutionSyncService.conflict("Create operations cannot have an expected version");
         return this.fieldVisitService.create({ ...common, organizationId: principal.organizationId, occurredAt: operation.occurredAt });
       case "fieldVisit.arrive":
-        this.#assertVersion(principal, operation);
+        if (!db) this.#assertVersion(principal, operation);
         return this.fieldVisitService.arrive({ ...common, fieldVisitId: operation.fieldVisitId, arrivedAt: operation.occurredAt, expectedVersion: operation.expectedVersion });
       case "fieldVisit.start":
-        this.#assertVersion(principal, operation);
+        if (!db) this.#assertVersion(principal, operation);
         return this.fieldVisitService.start({ ...common, fieldVisitId: operation.fieldVisitId, actualStartTime: operation.occurredAt, expectedVersion: operation.expectedVersion });
       case "fieldVisit.stop":
-        this.#assertVersion(principal, operation);
+        if (!db) this.#assertVersion(principal, operation);
         return this.fieldVisitService.stop({ ...common, fieldVisitId: operation.fieldVisitId, actualEndTime: operation.occurredAt, expectedVersion: operation.expectedVersion });
       case "fieldVisit.complete":
-        this.#assertVersion(principal, operation);
+        if (!db) this.#assertVersion(principal, operation);
         return this.fieldVisitService.complete({ ...common, fieldVisitId: operation.fieldVisitId, completedAt: operation.occurredAt, expectedVersion: operation.expectedVersion });
       case "fieldVisit.closeIncomplete":
-        this.#assertVersion(principal, operation);
+        if (!db) this.#assertVersion(principal, operation);
         return this.fieldVisitService.closeIncomplete({ ...common, fieldVisitId: operation.fieldVisitId, closedAt: operation.occurredAt, expectedVersion: operation.expectedVersion });
       case "actualWork.create":
         if (operation.expectedVersion !== null) throw FieldExecutionSyncService.conflict("Actual work creation does not use a version precondition");

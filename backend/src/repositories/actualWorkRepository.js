@@ -71,7 +71,7 @@ class ActualWorkRepository {
       description: row.description,
       actualStartTime: row.actual_start_time,
       actualEndTime: row.actual_end_time,
-      quantity: row.quantity,
+      quantity: row.quantity === null ? null : Number(row.quantity),
       unit: row.unit,
       metadata: row.metadata
     });

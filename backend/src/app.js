@@ -17,7 +17,7 @@ const FRONTEND_FILES = {
   "/": { file: "index.html", contentType: "text/html; charset=utf-8" },
   "/app.js": { file: "app.js", contentType: "text/javascript; charset=utf-8" }
 };
-const FRONTEND_DIR = path.resolve(__dirname, "../../frontend");
+const FRONTEND_DIR = path.resolve(__dirname, "../../frontend/src");
 
 function createAppState(seed = {}) {
   const resources = seed.resources || [new Resource({

@@ -30,7 +30,7 @@ class ActualWorkRepository {
 
   async get({ principal, actualWorkId, db = this.pool }) {
     this.#requirePrincipal(principal);
-    const result = await this.pool.query(
+    const result = await db.query(
       `SELECT * FROM actual_work
        WHERE organization_id = $1 AND id = $2`,
       [principal.organizationId, actualWorkId]
@@ -52,7 +52,7 @@ class ActualWorkRepository {
       filters.push(`work_order_id = $${values.length}`);
     }
 
-    const result = await this.pool.query(
+    const result = await db.query(
       `SELECT * FROM actual_work
        WHERE ${filters.join(" AND ")}
        ORDER BY created_at DESC, id DESC`,

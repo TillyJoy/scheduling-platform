@@ -228,7 +228,7 @@ class FieldVisitService {
       arrive: visit.arrivedAt, start: visit.actualStartTime, stop: visit.actualEndTime,
       complete: visit.completedAt, closeIncomplete: visit.closedAt
     };
-    this.#record(principal, visit, "field-visit." + (action === "closeIncomplete" ? "closed_incomplete" : action + "ed"), null, {
+    this.#record(principal, visit, "field-visit." + ({ arrive: "arrived", start: "started", stop: "stopped", complete: "completed", closeIncomplete: "closed_incomplete" }[action]), null, {
       ...visit, version: visit.version
     }, times[action] || this.clock());
   }

@@ -575,6 +575,18 @@ The same landlord may be associated with multiple properties.
 
 The integration should preserve the landlord/property relationship independently.
 
+## Integration Security Boundary
+
+The Composio connection used for Scheduling Platform integration development and testing is restricted to the user's private/free Monday.com developer account.
+
+The user's work Monday.com account is not connected through Composio and must not be accessed or modified through this integration workflow.
+
+The private/free developer account is the permitted Monday.com environment for integration development and testing.
+
+Project architecture and integration records must not contain credentials, connection tokens, or specific Composio account IDs.
+
+This is an active integration/security constraint and does not change the core Monday.com integration architecture.
+
 ## Integration Configuration
 
 Authorized administrators should be able to configure:

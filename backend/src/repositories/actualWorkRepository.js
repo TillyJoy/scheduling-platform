@@ -7,13 +7,13 @@ class ActualWorkRepository {
     this.clock = clock;
   }
 
-  async create({ principal, work }) {
+  async create({ principal, work, db = this.pool }) {
     this.#requirePrincipal(principal);
     const record = new ActualWork(work);
     if (record.organizationId !== principal.organizationId) throw new Error("Actual work organization mismatch");
     const now = this.clock();
 
-    const result = await this.pool.query(
+    const result = await db.query(
       `INSERT INTO actual_work
         (id, organization_id, field_visit_id, work_order_id, resource_id, description,
          actual_start_time, actual_end_time, quantity, unit, metadata, created_at, updated_at)
@@ -28,7 +28,7 @@ class ActualWorkRepository {
     return this.#map(result.rows[0]);
   }
 
-  async get({ principal, actualWorkId }) {
+  async get({ principal, actualWorkId, db = this.pool }) {
     this.#requirePrincipal(principal);
     const result = await this.pool.query(
       `SELECT * FROM actual_work
@@ -38,7 +38,7 @@ class ActualWorkRepository {
     return result.rows[0] ? this.#map(result.rows[0]) : null;
   }
 
-  async list({ principal, fieldVisitId = null, workOrderId = null } = {}) {
+  async list({ principal, fieldVisitId = null, workOrderId = null, db = this.pool } = {}) {
     this.#requirePrincipal(principal);
     const values = [principal.organizationId];
     const filters = ["organization_id = $1"];

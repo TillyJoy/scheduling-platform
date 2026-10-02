@@ -15,6 +15,7 @@ class ActualWorkService {
   } = {}) {
     this.actualWorkStore = actualWorkStore;
     this.fieldVisitStore = fieldVisitStore;
+    if (actualWorkRepository && (!fieldVisitRepository || !transaction)) throw new Error("field visit repository and transaction are required with actual work repository");
     this.fieldVisitRepository = fieldVisitRepository;
     this.actualWorkRepository = actualWorkRepository;
     this.transaction = transaction;

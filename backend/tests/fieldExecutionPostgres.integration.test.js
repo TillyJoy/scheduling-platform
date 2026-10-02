@@ -19,7 +19,7 @@ if (!process.env.DATABASE_URL || process.env.RUN_POSTGRES_TESTS !== "1") {
     t.after(() => pool.end());
     await runMigrations(pool);
 
-    const organizationId = "postgres-field-execution-test";
+    const organizationId = `postgres-field-execution-test-${process.pid}-${Date.now()}`;
     const principal = {
       userId: "worker-1",
       organizationId,

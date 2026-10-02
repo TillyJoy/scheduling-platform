@@ -67,35 +67,37 @@ class FieldExecutionSyncService {
         return { operationId: normalized.operationId, status: "duplicate", result: previous.result };
       }
 
+      let result;
       try {
-        const result = await this.#dispatch(principal, normalized, { db, deferEvents: true, postCommit });
-        const summarized = this.#summarizeResult(result);
+        result = await this.#dispatch(principal, normalized, { db, deferEvents: true, postCommit });
+      } catch (error) {
+        if (error.statusCode !== 409) {
+          return { operationId: normalized.operationId, status: "rejected", error: error.message };
+        }
         await this.operationRepository.create({
           principal,
           operation: normalized,
           fingerprint,
-          status: "applied",
-          result: summarized,
+          status: "conflict",
+          result: null,
           db
         });
-        return { operationId: normalized.operationId, status: "applied", result: summarized };
-      } catch (error) {
-        if (error.statusCode === 409) {
-          await this.operationRepository.create({
-            principal,
-            operation: normalized,
-            fingerprint,
-            status: "conflict",
-            result: null,
-            db
-          });
-          return {
-            operationId: normalized.operationId, status: "conflict",
-            conflictType: error.conflictType || "state_version", error: error.message
-          };
-        }
-        return { operationId: normalized.operationId, status: "rejected", error: error.message };
+        return {
+          operationId: normalized.operationId, status: "conflict",
+          conflictType: error.conflictType || "state_version", error: error.message
+        };
       }
+
+      const summarized = this.#summarizeResult(result);
+      await this.operationRepository.create({
+        principal,
+        operation: normalized,
+        fingerprint,
+        status: "applied",
+        result: summarized,
+        db
+      });
+      return { operationId: normalized.operationId, status: "applied", result: summarized };
     };
 
     const result = this.transaction

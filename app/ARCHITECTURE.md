@@ -380,6 +380,32 @@ Reports should not require Monday.com to remain available.
 
 Reports are described in `REPORTING.md`.
 
+## Future Analytics / Read-Layer Architecture
+
+The application's transactional operational data remains the authoritative source for operational records and business transactions.
+
+For future high-volume reporting and analytics workloads, the architecture may distinguish between:
+
+`Operational transactional data → analytics/reporting read layer → dashboards and high-volume analytics`
+
+This is a future architectural consideration rather than an MVP requirement. It does not change the existing transactional architecture and does not require a separate analytics database or read model at this stage.
+
+As scale, query volume, or analytical workload characteristics justify it, the platform may introduce read-optimized, pre-aggregated, replicated, cached, or otherwise analytical structures. The appropriate approach should be selected based on demonstrated workload and consistency requirements rather than assumed in advance.
+
+Any future analytical/read-layer implementation must preserve:
+
+- Organization and tenant isolation.
+- Backend-enforced permissions and role/department access boundaries.
+- Privacy and minimum-necessary-data principles.
+- Auditability.
+- Historical reporting accuracy.
+- A clear relationship to authoritative operational records.
+- Explicit and appropriate consistency expectations between operational and analytical data.
+
+Analytical structures must not become an independent source of truth for transactional operations. Existing asynchronous report generation remains part of the reporting architecture and may continue to be used alongside any future read-optimized structures.
+
+No implementation tables, APIs, synchronization mechanisms, or separate analytical datastore are mandated by this consideration.
+
 ## Failure Isolation
 
 Failure of an external service should not unnecessarily stop the core application.

@@ -305,6 +305,32 @@ Large reports should be generated efficiently.
 
 Long-running reports may run asynchronously rather than blocking the application.
 
+## Future Analytics / Read-Layer Architecture
+
+High-volume reporting and analytics should not necessarily query transactional operational tables directly for every dashboard, metric, or analytical workload.
+
+The future architecture may distinguish between:
+
+`Operational transactional data → analytics/reporting read layer → dashboards and high-volume analytics`
+
+This is a future architectural capability, not an immediate implementation requirement. The existing transactional architecture remains authoritative and unchanged.
+
+As scale and workload characteristics justify it, the platform may introduce read-optimized, pre-aggregated, replicated, cached, or otherwise analytical structures to support reporting and analytics. A separate analytics database or read model is not required immediately and should only be introduced when the operational and performance requirements demonstrate a need.
+
+Any future read-layer implementation must:
+
+- Preserve organization and tenant isolation.
+- Enforce the same applicable permissions and access boundaries as the authoritative operational data.
+- Preserve privacy and minimum-necessary-data principles.
+- Maintain auditability for relevant access and administrative operations.
+- Preserve historical reporting accuracy and avoid rewriting historical results when current configuration changes.
+- Maintain a clear relationship to authoritative operational records and defined consistency expectations.
+- Avoid making analytical structures an independent source of truth for transactional operations.
+
+The existing asynchronous report-generation approach remains valid. Future read-layer structures may complement asynchronous processing rather than replace it.
+
+No specific analytics database, read model, schema, API, synchronization mechanism, or implementation pattern is mandated by this architectural consideration.
+
 ## Future Analytics
 
 The architecture should allow future analytics such as:

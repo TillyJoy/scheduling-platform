@@ -35,7 +35,11 @@ class ActualWorkService {
       this.#authorize(principal, "actualWork:read", work.organizationId);
       return this.#clone(work);
     }
-    return this.actualWorkRepository.get({ principal, actualWorkId }).then(work => {
+    const read = async db => this.actualWorkRepository.get({ principal, actualWorkId, db });
+    const load = this.transaction
+      ? this.transaction(principal, "actual-work.read", read)
+      : this.actualWorkRepository.get({ principal, actualWorkId });
+    return load.then(work => {
       if (!work) throw new Error("Actual work not found");
       this.#authorize(principal, "actualWork:read", work.organizationId);
       return this.#clone(work);
@@ -52,7 +56,11 @@ class ActualWorkService {
         .filter(work => !workOrderId || work.workOrderId === workOrderId)
         .map(work => this.#clone(work));
     }
-    return this.actualWorkRepository.list({ principal, fieldVisitId, workOrderId }).then(work => work.map(item => this.#clone(item)));
+    const read = async db => this.actualWorkRepository.list({ principal, fieldVisitId, workOrderId, db });
+    const load = this.transaction
+      ? this.transaction(principal, "actual-work.list", read)
+      : this.actualWorkRepository.list({ principal, fieldVisitId, workOrderId });
+    return load.then(work => work.map(item => this.#clone(item)));
   }
 
   async #durableCreate({ principal, occurredAt = null, db = null, deferEvents = false, postCommit = [], ...input } = {}) {
@@ -67,7 +75,8 @@ class ActualWorkService {
       const existing = await this.actualWorkRepository.get({ principal, actualWorkId: work.id, db: client });
       if (existing) throw new Error("Actual work ID already exists");
       const saved = await this.actualWorkRepository.create({ principal, work, db: client });
-      if (deferEvents) postCommit.push(() => this.#record(principal, saved, occurredAt === null ? new Date() : new Date(occurredAt)));\n      else this.#record(principal, saved, occurredAt === null ? new Date() : new Date(occurredAt));
+      if (deferEvents) postCommit.push(() => this.#record(principal, saved, occurredAt === null ? new Date() : new Date(occurredAt)));
+      else this.#record(principal, saved, occurredAt === null ? new Date() : new Date(occurredAt));
       return saved;
     };
     return db ? write(db) : this.#inTransaction(principal, "actual-work.create", write);

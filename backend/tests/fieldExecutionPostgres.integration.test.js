@@ -123,7 +123,7 @@ if (!process.env.DATABASE_URL || process.env.RUN_POSTGRES_TESTS !== "1") {
         payload: { statusCode: "arrived" }
       }]
     });
-    assert.equal(arrived[0].status, "applied");
+    assert.equal(arrived[0].status, "applied", JSON.stringify(arrived[0]));
 
     const work = await second.actualWorkService.create({
       principal,

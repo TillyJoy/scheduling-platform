@@ -46,7 +46,7 @@ class FieldVisitService {
       this.#authorize(principal, "fieldVisit:read", visit.organizationId);
       return this.#clone(visit);
     }
-    return this.fieldVisitRepository.get({ principal, fieldVisitId }).then(visit => {
+    const read = async db => this.fieldVisitRepository.get({ principal, fieldVisitId, db });\n    return this.transaction ? this.transaction(principal, "field-visit.read", read).then(visit => {
       if (!visit) throw new Error("Field visit not found");
       this.#authorize(principal, "fieldVisit:read", visit.organizationId);
       return this.#clone(visit);

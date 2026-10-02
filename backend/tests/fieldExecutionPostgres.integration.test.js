@@ -16,10 +16,21 @@ if (!process.env.DATABASE_URL || process.env.RUN_POSTGRES_TESTS !== "1") {
 
   test("durable field execution survives service instances and offline replay", async t => {
     const pool = createDatabasePool();
-    t.after(() => pool.end());
+    const organizationId = `postgres-field-execution-test-${process.pid}-${Date.now()}`;
+    t.after(async () => {
+      try {
+        await withTransaction(pool, { organizationId, userId: "cleanup", action: "test.cleanup" }, async db => {
+          await db.query("DELETE FROM actual_work WHERE organization_id = $1", [organizationId]);
+          await db.query("DELETE FROM field_execution_operations WHERE organization_id = $1", [organizationId]);
+          await db.query("DELETE FROM field_visits WHERE organization_id = $1", [organizationId]);
+          await db.query("DELETE FROM organizations WHERE id = $1", [organizationId]);
+        });
+      } finally {
+        await pool.end();
+      }
+    });
     await runMigrations(pool);
 
-    const organizationId = `postgres-field-execution-test-${process.pid}-${Date.now()}`;
     const principal = {
       userId: "worker-1",
       organizationId,

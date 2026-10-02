@@ -55,7 +55,7 @@ class ActualWorkService {
     return this.actualWorkRepository.list({ principal, fieldVisitId, workOrderId }).then(work => work.map(item => this.#clone(item)));
   }
 
-  async #durableCreate({ principal, occurredAt = null, db = null, deferEvents = false, ...input } = {}) {
+  async #durableCreate({ principal, occurredAt = null, db = null, deferEvents = false, postCommit = [], ...input } = {}) {
     this.#requirePrincipal(principal);
     this.#authorize(principal, "actualWork:create", principal.organizationId);
     const visit = await this.fieldVisitRepository.get({ principal, fieldVisitId: input.fieldVisitId, db: db || this.actualWorkRepository.pool });
@@ -67,7 +67,7 @@ class ActualWorkService {
       const existing = await this.actualWorkRepository.get({ principal, actualWorkId: work.id, db: client });
       if (existing) throw new Error("Actual work ID already exists");
       const saved = await this.actualWorkRepository.create({ principal, work, db: client });
-      if (!deferEvents) this.#record(principal, saved, occurredAt === null ? new Date() : new Date(occurredAt));
+      if (deferEvents) postCommit.push(() => this.#record(principal, saved, occurredAt === null ? new Date() : new Date(occurredAt)));\n      else this.#record(principal, saved, occurredAt === null ? new Date() : new Date(occurredAt));
       return saved;
     };
     return db ? write(db) : this.#inTransaction(principal, "actual-work.create", write);

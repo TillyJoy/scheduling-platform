@@ -17,7 +17,7 @@ const FRONTEND_FILES = {
   "/": { file: "index.html", contentType: "text/html; charset=utf-8" },
   "/app.js": { file: "app.js", contentType: "text/javascript; charset=utf-8" }
 };
-const FRONTEND_DIR = path.resolve(__dirname, "../../frontend/src");
+const FRONTEND_DIR = path.resolve(__dirname, "../../frontend");
 
 function createAppState(seed = {}) {
   const resources = seed.resources || [new Resource({
@@ -242,6 +242,21 @@ function createHandler(state, {
       }
       if (req.method === "GET" && FRONTEND_FILES[path]) {
         return staticFile(res, FRONTEND_FILES[path]);
+      }
+      if (req.method === "POST" && path === "/api/auth/dev-login") {
+        if (process.env.NODE_ENV !== "development") {
+          return json(res, 404, { error: "Route not found" });
+        }
+        if (!(authenticationService instanceof AuthenticationService)) {
+          const error = new Error("Authentication is not configured");
+          error.statusCode = 500;
+          throw error;
+        }
+        return json(res, 200, {
+          token: authenticationService.issueToken(principal()),
+          userId: "demo-user",
+          organizationId: "demo-org"
+        });
       }
 
       let p;

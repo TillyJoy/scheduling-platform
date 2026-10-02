@@ -668,7 +668,7 @@ Implemented:
 - durable notification delivery-key uniqueness
 - durable field-execution operation idempotency storage
 
-Domain services still use their existing in-memory stores. This batch intentionally establishes the persistence/security boundary before incrementally moving individual services behind repositories.
+The Field Visit and Actual Work services now use durable repositories when a PostgreSQL pool is configured. Their lifecycle writes and offline replay share transaction boundaries with the durable operation ledger. Other domain services remain on their existing stores and will move incrementally when their workflows require it.
 
 The application role must not rely on client-supplied tenant identifiers for authorization. API principals establish the trusted organization context before database work is performed.
 
@@ -690,3 +690,23 @@ The client persistence path uses:
 This is intentionally not a general repository framework. Additional entities should move to durable repositories incrementally when their workflow requires it.
 
 Scheduling queries must remain bounded by time/resource windows; background processing and incremental integration synchronization remain the mechanisms for work that should not block interactive requests.
+
+
+## Field Execution Persistence
+
+Field Visit and Actual Work are now durable when PostgreSQL persistence is configured.
+
+Implemented:
+
+- tenant-scoped `field_visits` storage with optimistic version replacement
+- tenant-scoped `actual_work` storage
+- tenant-scoped durable offline operation ledger
+- transaction-local trusted organization/user/action context for field execution reads and writes
+- durable offline replay with operation fingerprint validation
+- durable duplicate replay detection
+- version/conflict protection for Field Visit lifecycle changes
+- tenant-scoped composite foreign keys from Actual Work and offline operations to Field Visit
+- transaction boundaries that commit Field Visit/Actual Work state and the corresponding applied/conflict operation record together
+- post-commit preservation of existing audit and domain-event behavior
+
+The PostgreSQL integration test verifies migration execution, RLS context, persistence across service instances, duplicate replay, payload mismatch detection, version conflicts, and Actual Work persistence.

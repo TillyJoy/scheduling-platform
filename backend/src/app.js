@@ -102,19 +102,26 @@ function createAppState(seed = {}) {
     fieldVisitStore,
     appointmentStore,
     workOrderService,
+    fieldVisitRepository,
+    transaction,
     auditStore: auditEvents,
     domainEventService
   });
   const actualWorkService = new ActualWorkService({
     actualWorkStore,
     fieldVisitStore,
+    fieldVisitRepository,
+    actualWorkRepository,
+    transaction,
     auditStore: auditEvents,
     domainEventService
   });
   const fieldExecutionSyncService = new FieldExecutionSyncService({
     fieldVisitService,
     actualWorkService,
-    operationStore: offlineOperations
+    operationStore: offlineOperations,
+    operationRepository: fieldExecutionOperationRepository,
+    transaction
   });
 
   return {

@@ -43,6 +43,14 @@ jobs:
         working-directory: backend
         run: npm install --no-audit --no-fund
 
+      - name: Run focused field execution tests
+        working-directory: backend
+        env:
+          DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/scheduling_platform_test
+          DATABASE_SSL: "false"
+          RUN_POSTGRES_TESTS: 1
+        run: node --test tests/fieldVisitService.test.js tests/fieldExecutionSyncService.test.js tests/fieldExecutionSyncApi.test.js tests/fieldExecutionPostgres.integration.test.js
+
       - name: Run backend tests
         working-directory: backend
         env:

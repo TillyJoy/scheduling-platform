@@ -31,3 +31,27 @@ jobs:
       - name: Run backend tests
         working-directory: backend
         run: npm test
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Smoke test authenticated browser-facing workflow
+        working-directory: frontend
+        env:
+          NODE_ENV: development
+          AUTH_SECRET: mvp-ci-auth-secret-that-is-at-least-32-bytes-long
+        run: |
+          npm start > /tmp/scheduling-platform.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID' EXIT
+          for attempt in {1..20}; do
+            if curl --silent --fail http://127.0.0.1:3000/ > /tmp/frontend.html; then
+              break
+            fi
+            sleep 1
+          done
+          grep -q '<title>Scheduling Platform</title>' /tmp/frontend.html
+          TOKEN=$(curl --silent --fail -X POST http://127.0.0.1:3000/api/auth/dev-login | node -e 'let s=""; process.stdin.on("data", d => s+=d); process.stdin.on("end", () => process.stdout.write(JSON.parse(s).token))')
+          curl --silent --fail -H "Authorization: Bearer $TOKEN" http://127.0.0.1:3000/api/jobs > /tmp/jobs.json
+          grep -q 'Demo Client' /tmp/jobs.json

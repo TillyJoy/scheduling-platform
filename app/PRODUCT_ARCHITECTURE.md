@@ -480,3 +480,45 @@ The organization operates the application independently.
 The product updates itself through centrally managed releases.
 
 The organization can diagnose and resolve common problems without contacting the product owner.
+
+
+## Customer Surveys — Future Configurable Capability
+
+Customer Surveys are a future platform capability and are **not an MVP requirement** unless a later authoritative MVP decision explicitly brings them into scope.
+
+The platform should support a configurable survey lifecycle:
+
+**Work Completed → Survey Invitation → Survey Landing Page → Response → Survey Results → Reporting / Analytics**
+
+Organizations should be able to configure:
+
+- Questions
+- Question types
+- Ratings
+- Comments
+- Required fields
+- Branding
+- Expiration
+- Trigger conditions
+- Anonymous responses
+- Invitation timing
+- Follow-up behavior
+
+Survey definitions, invitations, responses, and results must be treated as distinct platform records rather than as reporting-only data.
+
+Survey responses may be associated, where configured and appropriate, with:
+
+- Organization
+- Person/customer
+- Job
+- Work Order
+- Appointment
+- Service
+- Resource/contractor
+
+These relationships must respect organization isolation, permissions, privacy requirements, and configured anonymity behavior.
+
+Survey capability should remain domain-neutral. Organizations may configure survey definitions and lifecycle behavior rather than requiring organization-specific code.
+
+This capability should eventually support both operational follow-up and reporting/analytics while preserving the distinction between survey response data and derived reports.
+

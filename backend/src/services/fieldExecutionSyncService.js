@@ -146,7 +146,7 @@ class FieldExecutionSyncService {
     }
   }
 
-  #dispatch(principal, operation, { db = null, deferEvents = false, postCommit = [] } = {}) {
+  async #dispatch(principal, operation, { db = null, deferEvents = false, postCommit = [] } = {}) {
     const common = {
       principal,
       ...(operation.payload || {}),
@@ -155,25 +155,25 @@ class FieldExecutionSyncService {
     switch (operation.operationType) {
       case "fieldVisit.create":
         if (operation.expectedVersion !== null) throw FieldExecutionSyncService.conflict("Create operations cannot have an expected version");
-        return this.fieldVisitService.create({ ...common, organizationId: principal.organizationId, occurredAt: operation.occurredAt });
+        return await this.fieldVisitService.create({ ...common, organizationId: principal.organizationId, occurredAt: operation.occurredAt });
       case "fieldVisit.arrive":
         this.#assertVersion(principal, operation);
-        return this.fieldVisitService.arrive({ ...common, fieldVisitId: operation.fieldVisitId, arrivedAt: operation.occurredAt, expectedVersion: operation.expectedVersion });
+        return await this.fieldVisitService.arrive({ ...common, fieldVisitId: operation.fieldVisitId, arrivedAt: operation.occurredAt, expectedVersion: operation.expectedVersion });
       case "fieldVisit.start":
         this.#assertVersion(principal, operation);
-        return this.fieldVisitService.start({ ...common, fieldVisitId: operation.fieldVisitId, actualStartTime: operation.occurredAt, expectedVersion: operation.expectedVersion });
+        return await this.fieldVisitService.start({ ...common, fieldVisitId: operation.fieldVisitId, actualStartTime: operation.occurredAt, expectedVersion: operation.expectedVersion });
       case "fieldVisit.stop":
         this.#assertVersion(principal, operation);
-        return this.fieldVisitService.stop({ ...common, fieldVisitId: operation.fieldVisitId, actualEndTime: operation.occurredAt, expectedVersion: operation.expectedVersion });
+        return await this.fieldVisitService.stop({ ...common, fieldVisitId: operation.fieldVisitId, actualEndTime: operation.occurredAt, expectedVersion: operation.expectedVersion });
       case "fieldVisit.complete":
         this.#assertVersion(principal, operation);
-        return this.fieldVisitService.complete({ ...common, fieldVisitId: operation.fieldVisitId, completedAt: operation.occurredAt, expectedVersion: operation.expectedVersion });
+        return await this.fieldVisitService.complete({ ...common, fieldVisitId: operation.fieldVisitId, completedAt: operation.occurredAt, expectedVersion: operation.expectedVersion });
       case "fieldVisit.closeIncomplete":
         this.#assertVersion(principal, operation);
-        return this.fieldVisitService.closeIncomplete({ ...common, fieldVisitId: operation.fieldVisitId, closedAt: operation.occurredAt, expectedVersion: operation.expectedVersion });
+        return await this.fieldVisitService.closeIncomplete({ ...common, fieldVisitId: operation.fieldVisitId, closedAt: operation.occurredAt, expectedVersion: operation.expectedVersion });
       case "actualWork.create":
         if (operation.expectedVersion !== null) throw FieldExecutionSyncService.conflict("Actual work creation does not use a version precondition");
-        return this.actualWorkService.create({ ...common, organizationId: principal.organizationId, occurredAt: operation.occurredAt });
+        return await this.actualWorkService.create({ ...common, organizationId: principal.organizationId, occurredAt: operation.occurredAt });
       default:
         throw new Error("Unsupported field execution operation type");
     }

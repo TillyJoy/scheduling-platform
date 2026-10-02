@@ -42,7 +42,7 @@ CREATE POLICY field_visits_tenant_isolation ON field_visits
 CREATE TABLE IF NOT EXISTS actual_work (
   id TEXT PRIMARY KEY,
   organization_id TEXT NOT NULL REFERENCES organizations(id),
-  field_visit_id TEXT NOT NULL REFERENCES field_visits(id),
+  field_visit_id TEXT NOT NULL,
   work_order_id TEXT NOT NULL,
   resource_id TEXT,
   description TEXT NOT NULL,
@@ -59,6 +59,11 @@ CREATE INDEX IF NOT EXISTS idx_actual_work_org_visit
   ON actual_work (organization_id, field_visit_id, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_actual_work_org_work_order
   ON actual_work (organization_id, work_order_id, created_at DESC, id DESC);
+
+ALTER TABLE actual_work
+  ADD CONSTRAINT actual_work_field_visit_fk
+  FOREIGN KEY (organization_id, field_visit_id)
+  REFERENCES field_visits (organization_id, id);
 
 ALTER TABLE actual_work ENABLE ROW LEVEL SECURITY;
 ALTER TABLE actual_work FORCE ROW LEVEL SECURITY;

@@ -191,6 +191,32 @@ Administrators should configure:
 - Templates
 - Enable/disable settings
 
+
+### Mandatory Communications
+
+Mandatory communications are a first-class architectural requirement of the notification and communication architecture.
+
+The architecture must distinguish among:
+
+- **Mandatory communications** that cannot be disabled by recipient preference.
+- **Preference-controlled or optional communications** that may be affected by applicable recipient preferences.
+- **Organization-configured requirements** that define which communications are required, under what conditions, for which recipients, and through which permitted channels.
+
+Mandatory status must be evaluated as part of notification processing and must interact explicitly with:
+
+- Recipient and channel preferences, with mandatory requirements taking precedence where applicable.
+- Configurable notification rules, including required/optional behavior, conditions, timing, priority, and enabled state.
+- Recipient resolution, so required recipients are determined through the same authorized, organization-scoped resolution architecture.
+- Delivery-channel architecture, including permitted fallback or alternate channels when required delivery cannot use a recipient-preferred channel.
+- Organization/tenant isolation, so requirements and resulting communications remain scoped to the owning organization.
+- Permissions, so configuration and operational handling of mandatory communications remain subject to the existing authorization model.
+- Auditability, including configuration and material delivery decisions or outcomes needed to establish what was required and how it was handled.
+- Delivery and retry behavior, so required communications are not treated as optional merely because an initial delivery attempt fails; applicable retry, failure, and escalation behavior must preserve the required-communication semantics.
+
+This requirement does not prescribe organization-specific mandatory communications in core platform logic. The platform must provide the architectural capability for organizations to configure applicable requirements within the shared notification framework.
+
+This is an architectural requirement only. The existing notification foundation does not imply that mandatory communications are currently implemented, and this requirement does not by itself add mandatory communications to MVP implementation scope.
+
 ## Integration Security
 
 External credentials must never be stored in source code.

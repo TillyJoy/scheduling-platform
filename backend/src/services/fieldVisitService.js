@@ -46,7 +46,11 @@ class FieldVisitService {
       this.#authorize(principal, "fieldVisit:read", visit.organizationId);
       return this.#clone(visit);
     }
-    const read = async db => this.fieldVisitRepository.get({ principal, fieldVisitId, db });\n    return this.transaction ? this.transaction(principal, "field-visit.read", read).then(visit => {
+    const read = async db => this.fieldVisitRepository.get({ principal, fieldVisitId, db });
+    const load = this.transaction
+      ? this.transaction(principal, "field-visit.read", read)
+      : this.fieldVisitRepository.get({ principal, fieldVisitId });
+    return load.then(visit => {
       if (!visit) throw new Error("Field visit not found");
       this.#authorize(principal, "fieldVisit:read", visit.organizationId);
       return this.#clone(visit);
@@ -57,10 +61,9 @@ class FieldVisitService {
     if (!this.fieldVisitRepository) {
       return this.fieldVisitStore.get(FieldVisitService.storageKey(organizationId, fieldVisitId)) ?? null;
     }
-    return this.fieldVisitRepository.get({
-      principal: { userId: "system", organizationId },
-      fieldVisitId
-    });
+    const principal = { userId: "system", organizationId };
+    const read = async db => this.fieldVisitRepository.get({ principal, fieldVisitId, db });
+    return this.transaction ? this.transaction(principal, "field-visit.read", read) : read(this.fieldVisitRepository.pool);
   }
 
   list({ principal, appointmentId = null, workOrderId = null, resourceId = null } = {}) {
@@ -74,8 +77,11 @@ class FieldVisitService {
         .filter(visit => !resourceId || visit.resourceIds.includes(resourceId))
         .map(visit => this.#clone(visit));
     }
-    return this.fieldVisitRepository.list({ principal, appointmentId, workOrderId, resourceId })
-      .then(visits => visits.map(visit => this.#clone(visit)));
+    const read = async db => this.fieldVisitRepository.list({ principal, appointmentId, workOrderId, resourceId, db });
+    const load = this.transaction
+      ? this.transaction(principal, "field-visit.list", read)
+      : this.fieldVisitRepository.list({ principal, appointmentId, workOrderId, resourceId });
+    return load.then(visits => visits.map(visit => this.#clone(visit)));
   }
 
   async #durableCreate({ principal, occurredAt = null, db = null, deferEvents = false, postCommit = [], ...input } = {}) {
@@ -99,7 +105,8 @@ class FieldVisitService {
       const existing = await this.fieldVisitRepository.get({ principal, fieldVisitId: visit.id, db: client });
       if (existing) throw new Error("Field visit ID already exists");
       const saved = await this.fieldVisitRepository.create({ principal, visit, db: client });
-      if (deferEvents) postCommit.push(() => this.#record(principal, saved, "field-visit.created", null, saved, eventTime));\n      else this.#record(principal, saved, "field-visit.created", null, saved, eventTime);
+      if (deferEvents) postCommit.push(() => this.#record(principal, saved, "field-visit.created", null, saved, eventTime));
+      else this.#record(principal, saved, "field-visit.created", null, saved, eventTime);
       return saved;
     };
     return db ? write(db) : this.#inTransaction(principal, "field-visit.create", write);
@@ -117,7 +124,8 @@ class FieldVisitService {
       const saved = await this.fieldVisitRepository.replace({
         principal, fieldVisit: visit, expectedVersion: current.version, db: client
       });
-      if (deferEvents) postCommit.push(() => this.#recordLifecycle(principal, saved, action, args));\n      else this.#recordLifecycle(principal, saved, action, args);
+      if (deferEvents) postCommit.push(() => this.#recordLifecycle(principal, saved, action, args));
+      else this.#recordLifecycle(principal, saved, action, args);
       return saved;
     };
     return args.db ? run(args.db) : this.#inTransaction(principal, "field-visit." + action, run);

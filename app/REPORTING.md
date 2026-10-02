@@ -316,3 +316,24 @@ The architecture should allow future analytics such as:
 - No-show trends
 - Workload forecasting
 - Zone demand forecasting
+
+
+## Customer Survey Reporting
+
+Future survey reporting and analytics may include authorized analysis of:
+
+- Response rates
+- Ratings
+- Comments
+- Survey completion
+- Trends over time
+- Results by service
+- Results by appointment or work order where permitted
+- Results by resource/contractor where permitted
+
+Survey reporting must inherit the survey's privacy, anonymity, organization, department, role, and export permissions.
+
+Anonymous survey responses must not be exposed through drill-downs, exports, filters, or derived analytics in a way that defeats the configured anonymity policy.
+
+Survey analytics should use durable survey response records as source data and must not require surveys to be part of the core scheduling workflow.
+

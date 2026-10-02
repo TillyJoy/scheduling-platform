@@ -1,7 +1,10 @@
 const root = document.getElementById("root");
 
-async function api(path, options) {
-  const response = await fetch(path, options);
+async function api(path, options = {}) {
+  const token = localStorage.getItem("scheduling-platform-token");
+  const headers = { ...(options.headers || {}) };
+  if (token) headers.Authorization = "Bearer " + token;
+  const response = await fetch(path, { ...options, headers });
   let data = {};
   try {
     data = await response.json();
@@ -28,6 +31,15 @@ function dateWindow(dateValue) {
     start: day.toISOString(),
     end: new Date(day.getTime() + 24 * 60 * 60000).toISOString()
   };
+}
+
+async function authenticate() {
+  const existing = localStorage.getItem("scheduling-platform-token");
+  if (existing) return;
+  const response = await fetch("/api/auth/dev-login", { method: "POST" });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || "Authentication failed");
+  localStorage.setItem("scheduling-platform-token", data.token);
 }
 
 async function load(dateValue = new Date().toISOString().slice(0, 10)) {
@@ -90,4 +102,6 @@ async function load(dateValue = new Date().toISOString().slice(0, 10)) {
   }
 }
 
-load();
+authenticate().then(() => load()).catch(error => {
+  root.innerHTML = `<main><h1>Scheduling Platform</h1><p class="error">Unable to authenticate: ${escapeHtml(error.message)}</p></main>`;
+});

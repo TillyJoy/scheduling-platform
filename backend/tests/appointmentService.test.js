@@ -24,7 +24,8 @@ const schedulingService = new SchedulingService({
   }],
   assignments: [],
   holds: schedulingHolds,
-  appointments: appointmentStore
+  appointments: appointmentStore,
+  clock: () => new Date("2026-10-01T08:00:00Z")
 });
 
 const service = new AppointmentService({

@@ -10,7 +10,7 @@ const { WorkOrderService } = require("./services/workOrderService");
 const { FieldVisitService } = require("./services/fieldVisitService");
 const { ActualWorkService } = require("./services/actualWorkService");
 const { DomainEventService } = require("./services/domainEventService");
-const { FieldExecutionSyncService } = require("./services/fieldExecutionSyncService");
+const { FieldExecutionSyncService } = require("./services/fieldExecutionSyncService");\nconst { FieldVisitRepository } = require("./repositories/fieldVisitRepository");\nconst { ActualWorkRepository } = require("./repositories/actualWorkRepository");\nconst { FieldExecutionOperationRepository } = require("./repositories/fieldExecutionOperationRepository");\nconst { withTransaction } = require("./database");
 
 const MAX_BODY_BYTES = 1024 * 1024;
 const FRONTEND_FILES = {
@@ -56,7 +56,7 @@ function createAppState(seed = {}) {
   const jobService = new JobService({ jobStore, authorize: () => true });
   const workOrderStore = new Map(workOrders.map(order => [JSON.stringify([order.organizationId, order.id]), order]));
   const workOrderService = new WorkOrderService({ workOrderStore, jobService });
-  const domainEventService = new DomainEventService({ eventStore: domainEvents, auditStore: auditEvents });
+  const domainEventService = new DomainEventService({ eventStore: domainEvents, auditStore: auditEvents });\n  const databasePool = seed.databasePool || null;\n  const transaction = databasePool\n    ? (principal, action, work) => withTransaction(databasePool, { organizationId: principal.organizationId, userId: principal.userId, action }, work)\n    : null;\n  const fieldVisitRepository = databasePool ? new FieldVisitRepository({ pool: databasePool }) : null;\n  const actualWorkRepository = databasePool ? new ActualWorkRepository({ pool: databasePool }) : null;\n  const fieldExecutionOperationRepository = databasePool ? new FieldExecutionOperationRepository({ pool: databasePool }) : null;
 
   const schedulingService = new SchedulingService({
     resources,
@@ -127,7 +127,7 @@ function createAppState(seed = {}) {
     demoAvailability,
     schedulingService,
     appointmentService,
-    authenticationService: seed.authenticationService || null
+    authenticationService: seed.authenticationService || null,\n    databasePool
   };
 }
 
@@ -310,7 +310,7 @@ function createHandler(state, {
         if (!input || typeof input !== "object" || Array.isArray(input)) {
           return json(res, 400, { error: "Request body must be a JSON object" });
         }
-        const results = state.fieldExecutionSyncService.sync({
+        const results = await state.fieldExecutionSyncService.sync({
           principal: p,
           operations: input.operations
         });
@@ -325,7 +325,7 @@ function createHandler(state, {
         });
       }
       if (req.method === "GET" && path === "/api/field-visits") {
-        const visits = state.fieldVisitService.list({
+        const visits = await state.fieldVisitService.list({
           principal: p,
           appointmentId: url.searchParams.get("appointmentId"),
           workOrderId: url.searchParams.get("workOrderId"),
@@ -335,12 +335,12 @@ function createHandler(state, {
       }
       if (req.method === "GET" && path.startsWith("/api/field-visits/")) {
         const id = path.slice("/api/field-visits/".length);
-        return json(res, 200, serializeFieldVisit(state.fieldVisitService.get({ principal: p, fieldVisitId: id })));
+        return json(res, 200, serializeFieldVisit(await state.fieldVisitService.get({ principal: p, fieldVisitId: id })));
       }
       if (req.method === "POST" && path === "/api/field-visits") {
         const input = await readBody(req);
         if (!input || typeof input !== "object" || Array.isArray(input)) return json(res, 400, { error: "Request body must be a JSON object" });
-        const visit = state.fieldVisitService.create({ ...input, principal: p, organizationId: p.organizationId });
+        const visit = await state.fieldVisitService.create({ ...input, principal: p, organizationId: p.organizationId });
         return json(res, 201, serializeFieldVisit(visit));
       }
       const fieldVisitAction = path.match(/^\/api\/field-visits\/([^/]+)\/(arrive|start|stop|complete|close-incomplete)$/);
@@ -361,7 +361,7 @@ function createHandler(state, {
         return json(res, 200, serializeFieldVisit(visit));
       }
       if (req.method === "GET" && path === "/api/actual-work") {
-        const work = state.actualWorkService.list({
+        const work = await state.actualWorkService.list({
           principal: p,
           fieldVisitId: url.searchParams.get("fieldVisitId"),
           workOrderId: url.searchParams.get("workOrderId")
@@ -370,12 +370,12 @@ function createHandler(state, {
       }
       if (req.method === "GET" && path.startsWith("/api/actual-work/")) {
         const id = path.slice("/api/actual-work/".length);
-        return json(res, 200, serializeActualWork(state.actualWorkService.get({ principal: p, actualWorkId: id })));
+        return json(res, 200, serializeActualWork(await state.actualWorkService.get({ principal: p, actualWorkId: id })));
       }
       if (req.method === "POST" && path === "/api/actual-work") {
         const input = await readBody(req);
         if (!input || typeof input !== "object" || Array.isArray(input)) return json(res, 400, { error: "Request body must be a JSON object" });
-        const work = state.actualWorkService.create({ ...input, principal: p, organizationId: p.organizationId });
+        const work = await state.actualWorkService.create({ ...input, principal: p, organizationId: p.organizationId });
         return json(res, 201, serializeActualWork(work));
       }
       if (req.method === "POST" && path === "/api/appointments") {

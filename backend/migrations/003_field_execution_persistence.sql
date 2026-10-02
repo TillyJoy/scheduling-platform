@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS field_visits (
   completion_data JSONB NOT NULL DEFAULT '{}'::jsonb,
   metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (organization_id, id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_field_visits_org_updated

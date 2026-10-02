@@ -78,7 +78,7 @@ class FieldVisitService {
       .then(visits => visits.map(visit => this.#clone(visit)));
   }
 
-  async #durableCreate({ principal, occurredAt = null, db = null, deferEvents = false, ...input } = {}) {
+  async #durableCreate({ principal, occurredAt = null, db = null, deferEvents = false, postCommit = [], ...input } = {}) {
     this.#requirePrincipal(principal);
     this.#authorize(principal, "fieldVisit:create", principal.organizationId);
     const appointment = this.#getAppointment(principal.organizationId, input.appointmentId);
@@ -99,14 +99,14 @@ class FieldVisitService {
       const existing = await this.fieldVisitRepository.get({ principal, fieldVisitId: visit.id, db: client });
       if (existing) throw new Error("Field visit ID already exists");
       const saved = await this.fieldVisitRepository.create({ principal, visit, db: client });
-      if (!deferEvents) this.#record(principal, saved, "field-visit.created", null, saved, eventTime);
+      if (deferEvents) postCommit.push(() => this.#record(principal, saved, "field-visit.created", null, saved, eventTime));\n      else this.#record(principal, saved, "field-visit.created", null, saved, eventTime);
       return saved;
     };
     return db ? write(db) : this.#inTransaction(principal, "field-visit.create", write);
   }
 
   async #durableLifecycle(action, args = {}) {
-    const { principal, fieldVisitId, expectedVersion = null } = args;
+    const { principal, fieldVisitId, expectedVersion = null, deferEvents = false, postCommit = [] } = args;
     this.#requirePrincipal(principal);
     const run = async client => {
       const current = await this.fieldVisitRepository.get({ principal, fieldVisitId, db: client });
@@ -117,7 +117,7 @@ class FieldVisitService {
       const saved = await this.fieldVisitRepository.replace({
         principal, fieldVisit: visit, expectedVersion: current.version, db: client
       });
-      if (!args.deferEvents) this.#recordLifecycle(principal, saved, action, args);
+      if (deferEvents) postCommit.push(() => this.#recordLifecycle(principal, saved, action, args));\n      else this.#recordLifecycle(principal, saved, action, args);
       return saved;
     };
     return args.db ? run(args.db) : this.#inTransaction(principal, "field-visit." + action, run);

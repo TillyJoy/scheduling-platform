@@ -10,7 +10,11 @@ const { WorkOrderService } = require("./services/workOrderService");
 const { FieldVisitService } = require("./services/fieldVisitService");
 const { ActualWorkService } = require("./services/actualWorkService");
 const { DomainEventService } = require("./services/domainEventService");
-const { FieldExecutionSyncService } = require("./services/fieldExecutionSyncService");\nconst { FieldVisitRepository } = require("./repositories/fieldVisitRepository");\nconst { ActualWorkRepository } = require("./repositories/actualWorkRepository");\nconst { FieldExecutionOperationRepository } = require("./repositories/fieldExecutionOperationRepository");\nconst { withTransaction } = require("./database");
+const { FieldExecutionSyncService } = require("./services/fieldExecutionSyncService");
+const { FieldVisitRepository } = require("./repositories/fieldVisitRepository");
+const { ActualWorkRepository } = require("./repositories/actualWorkRepository");
+const { FieldExecutionOperationRepository } = require("./repositories/fieldExecutionOperationRepository");
+const { withTransaction } = require("./database");
 
 const MAX_BODY_BYTES = 1024 * 1024;
 const FRONTEND_FILES = {
@@ -56,7 +60,14 @@ function createAppState(seed = {}) {
   const jobService = new JobService({ jobStore, authorize: () => true });
   const workOrderStore = new Map(workOrders.map(order => [JSON.stringify([order.organizationId, order.id]), order]));
   const workOrderService = new WorkOrderService({ workOrderStore, jobService });
-  const domainEventService = new DomainEventService({ eventStore: domainEvents, auditStore: auditEvents });\n  const databasePool = seed.databasePool || null;\n  const transaction = databasePool\n    ? (principal, action, work) => withTransaction(databasePool, { organizationId: principal.organizationId, userId: principal.userId, action }, work)\n    : null;\n  const fieldVisitRepository = databasePool ? new FieldVisitRepository({ pool: databasePool }) : null;\n  const actualWorkRepository = databasePool ? new ActualWorkRepository({ pool: databasePool }) : null;\n  const fieldExecutionOperationRepository = databasePool ? new FieldExecutionOperationRepository({ pool: databasePool }) : null;
+  const domainEventService = new DomainEventService({ eventStore: domainEvents, auditStore: auditEvents });
+  const databasePool = seed.databasePool || null;
+  const transaction = databasePool
+    ? (principal, action, work) => withTransaction(databasePool, { organizationId: principal.organizationId, userId: principal.userId, action }, work)
+    : null;
+  const fieldVisitRepository = databasePool ? new FieldVisitRepository({ pool: databasePool }) : null;
+  const actualWorkRepository = databasePool ? new ActualWorkRepository({ pool: databasePool }) : null;
+  const fieldExecutionOperationRepository = databasePool ? new FieldExecutionOperationRepository({ pool: databasePool }) : null;
 
   const schedulingService = new SchedulingService({
     resources,
@@ -127,7 +138,8 @@ function createAppState(seed = {}) {
     demoAvailability,
     schedulingService,
     appointmentService,
-    authenticationService: seed.authenticationService || null,\n    databasePool
+    authenticationService: seed.authenticationService || null,
+    databasePool
   };
 }
 

@@ -121,9 +121,10 @@ class FieldVisitService {
       if (!current) throw new Error("Field visit not found");
       this.#authorize(principal, "fieldVisit:update", current.organizationId);
       this.#assertExpectedVersion(current, expectedVersion);
+      const previousVersion = current.version;
       const visit = this.#applyLifecycle(action, current, args);
       const saved = await this.fieldVisitRepository.replace({
-        principal, fieldVisit: visit, expectedVersion: current.version, db: client
+        principal, fieldVisit: visit, expectedVersion: previousVersion, db: client
       });
       if (deferEvents) postCommit.push(() => this.#recordLifecycle(principal, saved, action, args));
       else this.#recordLifecycle(principal, saved, action, args);

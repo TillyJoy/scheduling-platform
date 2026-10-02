@@ -82,7 +82,7 @@ if (!process.env.DATABASE_URL || process.env.RUN_POSTGRES_TESTS !== "1") {
         }
       }]
     });
-    assert.equal(create[0].status, "applied");
+    assert.equal(create[0].status, "applied", JSON.stringify(create[0]));
 
     const second = makeServices();
     const persisted = await second.fieldVisitService.get({ principal, fieldVisitId: "visit-pg-1" });

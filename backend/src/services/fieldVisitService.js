@@ -18,6 +18,7 @@ class FieldVisitService {
     this.fieldVisitStore = fieldVisitStore;
     this.appointmentStore = appointmentStore;
     this.workOrderService = workOrderService;
+    if (fieldVisitRepository && !transaction) throw new Error("transaction is required with fieldVisitRepository");
     this.fieldVisitRepository = fieldVisitRepository;
     this.transaction = transaction;
     this.auditStore = auditStore;

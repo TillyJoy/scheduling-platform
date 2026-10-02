@@ -457,3 +457,36 @@ The initial implementation should prioritize:
 12. Reporting
 
 The system should be tested at each stage before adding the next major component.
+
+
+## Customer Survey Capability
+
+Customer Surveys are a future, configurable platform capability rather than an MVP requirement.
+
+The survey subsystem should remain distinct from the reporting subsystem while exposing survey results to authorized reporting and analytics.
+
+The conceptual lifecycle is:
+
+**Work Completed → Survey Invitation → Survey Landing Page → Response → Survey Results → Reporting / Analytics**
+
+The platform should support configurable survey definitions and organization-specific configuration for:
+
+- Questions and question types
+- Ratings
+- Comments
+- Required fields
+- Branding
+- Expiration
+- Trigger conditions
+- Anonymous responses
+- Invitation timing
+- Follow-up behavior
+
+Survey responses may reference appropriate operational records, including the organization, person/customer, job, work order, appointment, service, and resource/contractor. Relationships must be organization-scoped and permission-aware.
+
+Privacy and anonymity are architectural concerns. Anonymous survey configuration must prevent unauthorized users from using response relationships or metadata to infer respondent identity beyond what the configured survey policy permits.
+
+Survey invitations and responses should participate in the platform's normal notification, authentication/authorization, audit, tenant-isolation, and durable-persistence boundaries when implemented.
+
+This capability must not introduce industry-specific survey logic or make surveys a prerequisite for scheduling or work completion.
+

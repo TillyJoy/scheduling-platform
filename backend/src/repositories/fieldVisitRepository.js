@@ -26,7 +26,7 @@ class FieldVisitRepository {
 
   async get({ principal, fieldVisitId, db = this.pool }) {
     this.#requirePrincipal(principal);
-    const result = await this.pool.query(
+    const result = await db.query(
       `SELECT * FROM field_visits
        WHERE organization_id = $1 AND id = $2`,
       [principal.organizationId, fieldVisitId]
@@ -52,7 +52,7 @@ class FieldVisitRepository {
       filters.push(`resource_ids @> $${values.length}::jsonb`);
     }
 
-    const result = await this.pool.query(
+    const result = await db.query(
       `SELECT * FROM field_visits
        WHERE ${filters.join(" AND ")}
        ORDER BY updated_at DESC, id DESC`,
@@ -67,7 +67,7 @@ class FieldVisitRepository {
     if (record.organizationId !== principal.organizationId) throw new Error("Field visit organization mismatch");
     if (!Number.isInteger(expectedVersion) || expectedVersion < 1) throw new Error("expectedVersion must be a positive integer");
 
-    const result = await this.pool.query(
+    const result = await db.query(
       `UPDATE field_visits
        SET appointment_id = $3, work_order_id = $4, version = $5, status_code = $6, resource_ids = $7::jsonb,
            arrived_at = $8, actual_start_time = $9, actual_end_time = $10, completed_at = $11,

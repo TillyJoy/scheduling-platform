@@ -14,6 +14,7 @@ class FieldExecutionSyncService {
     this.fieldVisitService = fieldVisitService;
     this.actualWorkService = actualWorkService;
     this.operationStore = operationStore;
+    if (operationRepository && !transaction) throw new Error("transaction is required with operationRepository");
     this.operationRepository = operationRepository;
     this.transaction = transaction;
     this.authorize = authorize;

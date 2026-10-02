@@ -7,11 +7,11 @@ class FieldVisitRepository {
     this.clock = clock;
   }
 
-  async create({ principal, visit }) {
+  async create({ principal, visit, db = this.pool }) {
     this.#requirePrincipal(principal);
     const record = new FieldVisit(visit);
     const now = this.clock();
-    const result = await this.pool.query(
+    const result = await db.query(
       `INSERT INTO field_visits
         (id, organization_id, appointment_id, work_order_id, version, status_code, resource_ids,
          arrived_at, actual_start_time, actual_end_time, completed_at, completed_by_user_id,
@@ -24,7 +24,7 @@ class FieldVisitRepository {
     return this.#map(result.rows[0]);
   }
 
-  async get({ principal, fieldVisitId }) {
+  async get({ principal, fieldVisitId, db = this.pool }) {
     this.#requirePrincipal(principal);
     const result = await this.pool.query(
       `SELECT * FROM field_visits
@@ -34,7 +34,7 @@ class FieldVisitRepository {
     return result.rows[0] ? this.#map(result.rows[0]) : null;
   }
 
-  async list({ principal, appointmentId = null, workOrderId = null, resourceId = null } = {}) {
+  async list({ principal, appointmentId = null, workOrderId = null, resourceId = null, db = this.pool } = {}) {
     this.#requirePrincipal(principal);
     const values = [principal.organizationId];
     const filters = ["organization_id = $1"];
@@ -61,7 +61,7 @@ class FieldVisitRepository {
     return result.rows.map(row => this.#map(row));
   }
 
-  async replace({ principal, fieldVisit, expectedVersion }) {
+  async replace({ principal, fieldVisit, expectedVersion, db = this.pool }) {
     this.#requirePrincipal(principal);
     const record = new FieldVisit(fieldVisit);
     if (record.organizationId !== principal.organizationId) throw new Error("Field visit organization mismatch");

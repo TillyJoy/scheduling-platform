@@ -66,12 +66,12 @@ class ActualWorkService {
   async #durableCreate({ principal, occurredAt = null, db = null, deferEvents = false, postCommit = [], ...input } = {}) {
     this.#requirePrincipal(principal);
     this.#authorize(principal, "actualWork:create", principal.organizationId);
-    const visit = await this.fieldVisitRepository.get({ principal, fieldVisitId: input.fieldVisitId, db: db || this.actualWorkRepository.pool });
-    if (!visit) throw new Error("Field visit not found");
-    if (visit.organizationId !== principal.organizationId) throw new Error("Not authorized");
-    if (visit.workOrderId !== input.workOrderId) throw new Error("Actual work is not linked to the field visit work order");
     const work = new ActualWork({ ...input, organizationId: principal.organizationId });
     const write = async client => {
+      const visit = await this.fieldVisitRepository.get({ principal, fieldVisitId: input.fieldVisitId, db: client });
+      if (!visit) throw new Error("Field visit not found");
+      if (visit.organizationId !== principal.organizationId) throw new Error("Not authorized");
+      if (visit.workOrderId !== input.workOrderId) throw new Error("Actual work is not linked to the field visit work order");
       const existing = await this.actualWorkRepository.get({ principal, actualWorkId: work.id, db: client });
       if (existing) throw new Error("Actual work ID already exists");
       const saved = await this.actualWorkRepository.create({ principal, work, db: client });

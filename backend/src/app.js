@@ -350,14 +350,14 @@ function createHandler(state, {
         const action = fieldVisitAction[2];
         const payload = { principal: p, fieldVisitId, ...(input && typeof input === "object" && !Array.isArray(input) ? input : {}) };
         const visit = action === "arrive"
-          ? state.fieldVisitService.arrive(payload)
+          ? await state.fieldVisitService.arrive(payload)
           : action === "start"
             ? state.fieldVisitService.start(payload)
             : action === "stop"
-              ? state.fieldVisitService.stop(payload)
+              ? await state.fieldVisitService.stop(payload)
               : action === "complete"
-                ? state.fieldVisitService.complete(payload)
-                : state.fieldVisitService.closeIncomplete(payload);
+                ? await state.fieldVisitService.complete(payload)
+                : await state.fieldVisitService.closeIncomplete(payload);
         return json(res, 200, serializeFieldVisit(visit));
       }
       if (req.method === "GET" && path === "/api/actual-work") {

@@ -193,7 +193,7 @@ test("durable Appointment / Hold persistence is tenant-safe, auditable, transact
   const tenantAHolds = await transaction(principalA, "test.rls", async db =>
     (await db.query("SELECT id FROM scheduling_holds ORDER BY id")).rows.map(row => row.id)
   );
-  assert.deepEqual(tenantAHolds, ["hold-1", "hold-cancel"]);
+  assert.deepEqual(tenantAHolds, ["hold-1", "hold-cancel", "hold-expire"]);
 
   const audit = await transaction(principalA, "test.audit", db =>
     db.query("SELECT action, entity_type FROM audit_events WHERE organization_id=$1 AND entity_type IN ('appointment','scheduling_hold') ORDER BY created_at,id", [orgA])

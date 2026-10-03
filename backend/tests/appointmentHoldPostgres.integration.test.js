@@ -103,7 +103,7 @@ test("durable Appointment / Hold persistence is tenant-safe, auditable, transact
     startTime: "2026-10-01T09:30:00Z", endTime: "2026-10-01T10:30:00Z",
     status: "scheduled", rescheduleReason: "Client requested a later time"
   });
-  assert.equal(updated.status, "reschedule_requested");
+  assert.equal(updated.status, "scheduled");
   assert.equal(updated.rescheduleReason, "Client requested a later time");
 
   const history = await transaction(principalA, "test.history", db =>

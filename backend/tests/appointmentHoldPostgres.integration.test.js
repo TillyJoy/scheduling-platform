@@ -19,6 +19,16 @@ test("durable Appointment / Hold persistence is tenant-safe, auditable, transact
 
   await runMigrations(pool);
 
+  const clientA = `client-a-${suffix}`;
+  const clientB = `client-b-${suffix}`;
+  const propertyA = `property-a-${suffix}`;
+  const propertyB = `property-b-${suffix}`;
+  const unitA = `unit-a-${suffix}`;
+  const unitB = `unit-b-${suffix}`;
+  const jobA = `job-a-${suffix}`;
+  const jobB = `job-b-${suffix}`;
+  const workOrderA = `wo-a-${suffix}`;
+  const workOrderB = `wo-b-${suffix}`;
   const principalA = { userId: `user-a-${suffix}`, organizationId: orgA, permissions };
   const principalB = { userId: `user-b-${suffix}`, organizationId: orgB, permissions };
   const transaction = (principal, action, work) =>
@@ -61,11 +71,11 @@ test("durable Appointment / Hold persistence is tenant-safe, auditable, transact
   t.after(cleanup);
 
   await pool.query("INSERT INTO organizations(id,name) VALUES ($1,$2),($3,$4)", [orgA, "Appointment Test A", orgB, "Appointment Test B"]);
-  await pool.query(`INSERT INTO clients(id,organization_id,first_name,last_name) VALUES ($1,$2,'A','Client'),($3,$4,'B','Client')`, ["client-1", orgA, "client-b", orgB]);
-  await pool.query(`INSERT INTO properties(id,organization_id,address,city,state) VALUES ($1,$2,'1 Main St','Testville','MA'),($3,$4,'2 Main St','Testville','MA')`, ["property-1", orgA, "property-b", orgB]);
-  await pool.query(`INSERT INTO units(id,organization_id,property_id,unit_identifier) VALUES ($1,$2,$3,'1'),($4,$5,$6,'1')`, ["unit-1", orgA, "property-1", "unit-b", orgB, "property-b"]);
-  await pool.query(`INSERT INTO jobs(id,organization_id,title,client_id) VALUES ($1,$2,'Job A',$3),($4,$5,'Job B',$6)`, ["job-1", orgA, "client-1", "job-b", orgB, "client-b"]);
-  await pool.query(`INSERT INTO work_orders(id,organization_id,job_id,number,title) VALUES ($1,$2,$3,'WO-A','Work A'),($4,$5,$6,'WO-B','Work B')`, ["wo-1", orgA, "job-1", "wo-b", orgB, "job-b"]);
+  await pool.query(`INSERT INTO clients(id,organization_id,first_name,last_name) VALUES ($1,$2,'A','Client'),($3,$4,'B','Client')`, [clientA, orgA, clientB, orgB]);
+  await pool.query(`INSERT INTO properties(id,organization_id,address,city,state) VALUES ($1,$2,'1 Main St','Testville','MA'),($3,$4,'2 Main St','Testville','MA')`, [propertyA, orgA, propertyB, orgB]);
+  await pool.query(`INSERT INTO units(id,organization_id,property_id,unit_identifier) VALUES ($1,$2,$3,'1'),($4,$5,$6,'1')`, [unitA, orgA, propertyA, unitB, orgB, propertyB]);
+  await pool.query(`INSERT INTO jobs(id,organization_id,title,client_id) VALUES ($1,$2,'Job A',$3),($4,$5,'Job B',$6)`, [jobA, orgA, clientA, jobB, orgB, clientB]);
+  await pool.query(`INSERT INTO work_orders(id,organization_id,job_id,number,title) VALUES ($1,$2,$3,'WO-A','Work A'),($4,$5,$6,'WO-B','Work B')`, [workOrderA, orgA, jobA, workOrderB, orgB, jobB]);
   await pool.query(`INSERT INTO resources(id,organization_id,name,resource_type) VALUES ($1,$2,'Resource A','person'),($3,$4,'Resource B','person'),($5,$6,'Resource B Only','person')`, ["resource-1", orgA, "resource-1", orgB, "resource-b-only", orgB]);
 
   await pool.query(`CREATE ROLE "${roleName}" NOLOGIN NOSUPERUSER NOBYPASSRLS`);
@@ -74,18 +84,18 @@ test("durable Appointment / Hold persistence is tenant-safe, auditable, transact
   await pool.query(`GRANT SELECT, INSERT ON audit_events TO "${roleName}"`);
 
   const appointment = await appointmentService.create({
-    principal: principalA, id: "appointment-1", clientId: "client-1", propertyId: "property-1",
-    workOrderId: "wo-1", teamId: "team-opaque-1", unitIds: ["unit-1"], serviceIds: ["service-opaque-1"], memberIds: ["resource-1"],
+    principal: principalA, id: "appointment-1", clientId: clientA, propertyId: propertyA,
+    workOrderId: workOrderA, teamId: "team-opaque-1", unitIds: [unitA], serviceIds: ["service-opaque-1"], memberIds: ["resource-1"],
     startTime: "2026-10-01T09:00:00Z", endTime: "2026-10-01T10:00:00Z", status: "scheduled"
   });
   assert.equal(appointment.id, "appointment-1");
-  assert.equal(appointment.workOrderId, "wo-1");
+  assert.equal(appointment.workOrderId, workOrderA);
   assert.deepEqual(appointment.memberIds, ["resource-1"]);
 
   const loaded = await appointmentService.get({ principal: principalA, appointmentId: "appointment-1" });
-  assert.equal(loaded.propertyId, "property-1");
+  assert.equal(loaded.propertyId, propertyA);
   assert.equal(loaded.teamId, "team-opaque-1");
-  assert.deepEqual(loaded.unitIds, ["unit-1"]);
+  assert.deepEqual(loaded.unitIds, [unitA]);
   assert.deepEqual(loaded.serviceIds, ["service-opaque-1"]);
 
   const updated = await appointmentService.update({
@@ -103,7 +113,7 @@ test("durable Appointment / Hold persistence is tenant-safe, auditable, transact
   assert.ok(history.rows.some(row => row.event_type === "rescheduled"));
 
   const hold = await appointmentService.createHold({
-    principal: principalA, id: "hold-1", clientId: "client-1", propertyId: "property-1", workOrderId: "wo-1",
+    principal: principalA, id: "hold-1", clientId: clientA, propertyId: propertyA, workOrderId: workOrderA,
     unitIds: ["unit-1"], serviceIds: ["service-opaque-1"], memberIds: ["resource-1"],
     startTime: "2026-10-01T11:00:00Z", endTime: "2026-10-01T12:00:00Z", expiresAt: "2026-10-01T08:15:00Z"
   });
@@ -151,7 +161,7 @@ test("durable Appointment / Hold persistence is tenant-safe, auditable, transact
   assert.equal(expired.find(item => item.id === holdToExpire.id).status, "expired");
 
   const otherTenantAppointment = await appointmentService.create({
-    principal: principalB, id: "appointment-1", clientId: "client-b", propertyId: "property-b",
+    principal: principalB, id: "appointment-1", clientId: clientB, propertyId: propertyB,
     memberIds: ["resource-1"], serviceIds: ["service-opaque-1"],
     startTime: "2026-10-01T09:00:00Z", endTime: "2026-10-01T10:00:00Z"
   });

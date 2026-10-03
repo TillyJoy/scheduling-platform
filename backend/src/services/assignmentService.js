@@ -12,7 +12,9 @@ class AssignmentService {
     authorize = AssignmentService.defaultAuthorize,
     statusResolver = null
   } = {}) {
-    if (assignmentRepository && !transaction) throw new Error("transaction is required with assignmentRepository");
+    if (assignmentRepository && (!transaction || !resourceRepository || !jobRepository || !workOrderRepository)) {
+      throw new Error("assignmentRepository requires transaction, resourceRepository, jobRepository, and workOrderRepository");
+    }
     this.assignmentStore = assignmentStore;
     this.assignmentRepository = assignmentRepository;
     this.resourceRepository = resourceRepository;

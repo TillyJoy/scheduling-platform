@@ -72,6 +72,7 @@ test("durable Assignment persistence is tenant-safe, auditable, transactional, a
         await db.query("DELETE FROM resources WHERE organization_id=$1", [organizationId]);
       }).catch(() => {});
     }
+    await pool.query("DELETE FROM organizations WHERE id = ANY($1::text[])", [[orgA, orgB]]);
     await pool.query(`DO $$ BEGIN
       IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${roleName}') THEN
         EXECUTE 'DROP OWNED BY "${roleName}"';

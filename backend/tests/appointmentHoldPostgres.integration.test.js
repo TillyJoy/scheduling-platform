@@ -29,11 +29,12 @@ test("durable Appointment / Hold persistence is tenant-safe, auditable, transact
 
   const appointmentRepository = new AppointmentRepository({ pool });
   const schedulingHoldRepository = new SchedulingHoldRepository({ pool });
+  let now = new Date("2026-10-01T08:00:00Z");
   const appointmentService = new AppointmentService({
     appointmentRepository,
     schedulingHoldRepository,
     transaction,
-    clock: () => new Date("2026-10-01T08:00:00Z")
+    clock: () => now
   });
 
   const cleanup = async () => {
@@ -65,7 +66,7 @@ test("durable Appointment / Hold persistence is tenant-safe, auditable, transact
   await pool.query(`INSERT INTO units(id,organization_id,property_id,unit_identifier) VALUES ($1,$2,$3,'1'),($4,$5,$6,'1')`, ["unit-1", orgA, "property-1", "unit-1", orgB, "property-1"]);
   await pool.query(`INSERT INTO jobs(id,organization_id,title,client_id) VALUES ($1,$2,'Job A',$3),($4,$5,'Job B',$6)`, ["job-1", orgA, "client-1", "job-1", orgB, "client-1"]);
   await pool.query(`INSERT INTO work_orders(id,organization_id,job_id,number,title) VALUES ($1,$2,$3,'WO-A','Work A'),($4,$5,$6,'WO-B','Work B')`, ["wo-1", orgA, "job-1", "wo-1", orgB, "job-1"]);
-  await pool.query(`INSERT INTO resources(id,organization_id,name,resource_type) VALUES ($1,$2,'Resource A','person'),($3,$4,'Resource B','person')`, ["resource-1", orgA, "resource-1", orgB]);
+  await pool.query(`INSERT INTO resources(id,organization_id,name,resource_type) VALUES ($1,$2,'Resource A','person'),($3,$4,'Resource B','person'),($5,$6,'Resource B Only','person')`, ["resource-1", orgA, "resource-1", orgB, "resource-b-only", orgB]);
 
   await pool.query(`CREATE ROLE "${roleName}" NOLOGIN NOSUPERUSER NOBYPASSRLS`);
   await pool.query(`GRANT USAGE ON SCHEMA public TO "${roleName}"`);
@@ -139,14 +140,14 @@ test("durable Appointment / Hold persistence is tenant-safe, auditable, transact
   });
   assert.equal((await appointmentService.cancelHold({ principal: principalA, holdId: holdToCancel.id })).status, "cancelled");
 
-  await assert.rejects(
-    () => appointmentService.createHold({
-      principal: principalA, id: "hold-expire", clientId: "client-1", propertyId: "property-1",
-      memberIds: ["resource-1"], startTime: "2026-10-01T14:00:00Z", endTime: "2026-10-01T15:00:00Z",
-      expiresAt: "2026-10-01T07:59:00Z"
-    }),
-    /expiresAt must be in the future/
-  );
+  const holdToExpire = await appointmentService.createHold({
+    principal: principalA, id: "hold-expire", clientId: "client-1", propertyId: "property-1",
+    memberIds: ["resource-1"], startTime: "2026-10-01T14:00:00Z", endTime: "2026-10-01T15:00:00Z",
+    expiresAt: "2026-10-01T08:15:00Z"
+  });
+  now = new Date("2026-10-01T08:30:00Z");
+  const expired = await appointmentService.expireHolds({ principal: principalA });
+  assert.equal(expired.find(item => item.id === holdToExpire.id).status, "expired");
 
   const otherTenantAppointment = await appointmentService.create({
     principal: principalB, id: "appointment-1", clientId: "client-1", propertyId: "property-1",
@@ -160,7 +161,7 @@ test("durable Appointment / Hold persistence is tenant-safe, auditable, transact
   await assert.rejects(
     () => appointmentService.create({
       principal: principalA, id: "cross-tenant-client", clientId: "client-1", propertyId: "property-1",
-      memberIds: ["resource-1"], serviceIds: ["service-opaque-1"],
+      memberIds: ["resource-b-only"], serviceIds: ["service-opaque-1"],
       startTime: "2026-10-01T16:00:00Z", endTime: "2026-10-01T17:00:00Z"
     }),
     /foreign key|violates row-level security/

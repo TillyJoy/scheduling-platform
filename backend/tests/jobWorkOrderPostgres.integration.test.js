@@ -121,7 +121,7 @@ if (!process.env.DATABASE_URL || process.env.RUN_POSTGRES_TESTS !== "1") {
       title: "Other tenant job",
       clientId: `client-${orgB}`
     });
-    assert.equal(otherJob.id, "job-1");
+    assert.equal(otherJob.id, "job-1-from-b");
 
     const otherOrder = await workOrderService.create({
       principal: principalB,

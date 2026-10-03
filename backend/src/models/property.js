@@ -1,14 +1,7 @@
 class Property {
-  constructor({
-    id,
-    address,
-    city,
-    state,
-    postalCode,
-    landlordId = null,
-    units = []
-  }) {
+  constructor({ id, organizationId = null, address, city, state, postalCode, landlordId = null, units = [] }) {
     this.id = id;
+    this.organizationId = organizationId;
     this.address = address;
     this.city = city;
     this.state = state;
@@ -17,5 +10,4 @@ class Property {
     this.units = units;
   }
 }
-
 module.exports = { Property };

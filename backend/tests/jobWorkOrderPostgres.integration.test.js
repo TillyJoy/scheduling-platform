@@ -197,7 +197,7 @@ if (!process.env.DATABASE_URL || process.env.RUN_POSTGRES_TESTS !== "1") {
       const clients = await db.query("SELECT id FROM clients ORDER BY id");
       return { jobs: jobs.rows, orders: orders.rows, clients: clients.rows };
     });
-    assert.deepEqual(isolated.jobs.map(row => row.id), ["job-1"]);
+    assert.deepEqual(isolated.jobs.map(row => row.id), ["job-1-from-b"]);
     assert.deepEqual(isolated.orders.map(row => row.id), ["wo-1"]);
     assert.deepEqual(isolated.clients.map(row => row.id), [`client-${orgB}`]);
 

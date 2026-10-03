@@ -10,7 +10,7 @@ test("relationship service enforces property/unit linkage and authorization",asy
  assert.equal((await service.createRelationship({principal,id:"rel-1",clientId:"client-1",propertyId:"property-1",unitId:"unit-1",relationshipType:"resident",startAt:"2026-01-01T00:00:00Z"})).id,"rel-1");
  await assert.rejects(service.createRelationship({principal,id:"rel-2",clientId:"client-1",propertyId:"property-1",unitId:"unit-2",relationshipType:"resident",startAt:"2026-01-01T00:00:00Z"}),/Unit not found/);
  await assert.rejects(service.createRelationship({principal,id:"rel-3",clientId:"client-1",propertyId:"missing",relationshipType:"resident",startAt:"2026-01-01T00:00:00Z"}),/Property not found/);
- await assert.rejects(service.createRelationship({...principal,permissions:[]}, {id:"rel-4"}),/Not authorized/).catch(()=>{});
+ await assert.rejects(service.createRelationship({principal:{...principal,permissions:[]},id:"rel-4",clientId:"client-1",propertyId:"property-1",relationshipType:"resident",startAt:"2026-01-01T00:00:00Z"}),/Not authorized/);
  assert.equal((await service.listClientRelationships({principal,clientId:"client-1"})).length,1);
  assert.equal((await service.listPropertyRelationships({principal,propertyId:"property-1"})).length,1);
 });

@@ -115,6 +115,13 @@ test("durable Resource / Qualification / Availability persistence is tenant-safe
   assert.equal(qualificationA.qualificationId, qualificationB.qualificationId);
   assert.equal(qualificationBOnly.organizationId, orgB);
 
+  const updatedQualification = await qualificationService.update({
+    principal: principalA, qualificationId: "qualification-1", code: "CERT-001",
+    name: "Certification Updated", description: "Updated definition", statusCode: "active",
+    metadata: { renewalMonths: 12 }
+  });
+  assert.equal(updatedQualification.name, "Certification Updated");
+
   await assert.rejects(
     () => qualificationService.create({ principal: principalA, qualificationId: "qualification-2", code: "CERT-001", name: "Duplicate Code" }),
     /duplicate|unique/i
@@ -132,6 +139,18 @@ test("durable Resource / Qualification / Availability persistence is tenant-safe
   assert.equal(resourceQualification.statusCode, "pending_review");
   assert.equal(resourceQualification.expirationAt.toISOString(), "2027-01-01T00:00:00.000Z");
   assert.deepEqual(resourceQualification.restrictions, { geography: "zone-a" });
+
+  const updatedResourceQualification = await resourceQualificationService.update({
+    principal: principalA, resourceQualificationId: "rq-1", resourceId: "resource-1",
+    qualificationId: "qualification-1", serviceRef: "service-opaque-1", statusCode: "active",
+    effectiveAt: "2026-01-01T00:00:00Z", expirationAt: "2027-06-01T00:00:00Z",
+    restrictions: { geography: "zone-b" }, verificationStatus: "verified",
+    verificationMetadata: { method: "document_review", reviewer: "user-verifier-1" },
+    verifiedAt: "2026-01-03T12:00:00Z", verifierRef: "user-verifier-1", evidenceRefs: ["document-1", "document-2"]
+  });
+  assert.equal(updatedResourceQualification.statusCode, "active");
+  assert.equal(updatedResourceQualification.expirationAt.toISOString(), "2027-06-01T00:00:00.000Z");
+
   assert.equal((await resourceQualificationService.list({ principal: principalA, resourceId: "resource-1", serviceRef: "service-opaque-1" })).length, 1);
 
   await assert.rejects(
@@ -164,6 +183,15 @@ test("durable Resource / Qualification / Availability persistence is tenant-safe
     zoneId: "zone-a", available: true
   });
   assert.equal(availability.zoneId, "zone-a");
+
+  const updatedAvailability = await availabilityService.update({
+    principal: principalA, id: "availability-1", resourceId: "resource-1",
+    startTime: "2026-10-05T10:00:00Z", endTime: "2026-10-05T13:00:00Z",
+    zoneId: "zone-b", available: false
+  });
+  assert.equal(updatedAvailability.available, false);
+  assert.equal(updatedAvailability.zoneId, "zone-b");
+
   assert.equal((await resourceQualificationService.list({ principal: principalA })).length, 1);
   assert.equal((await availabilityService.list({ principal: principalA, resourceId: "resource-1" })).length, 1);
 

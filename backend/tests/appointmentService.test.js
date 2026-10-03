@@ -5,7 +5,7 @@ const { SchedulingService } = require("../src/services/schedulingService");
 const principal = {
   userId: "user-a",
   organizationId: "org-a",
-  permissions: ["appointment:create", "appointment:confirm", "appointment:cancel", "appointment:read"]
+  permissions: ["appointment:create", "appointment:confirm", "appointment:cancel", "appointment:read", "appointment:update"]
 };
 const otherOrg = {
   userId: "user-b",
@@ -149,3 +149,15 @@ expiringService.createHold({
 });
 now = new Date("2026-10-01T08:30:00Z");
 assert.throws(() => expiringService.confirmHold({ principal, holdId: "hold-4" }), /no longer active/);
+
+
+const updatedAppointment = service.update({
+  principal,
+  id: "appointment-work-order",
+  status: "reschedule_requested",
+  startTime: "2026-10-01T10:15:00Z",
+  endTime: "2026-10-01T11:15:00Z",
+  rescheduleReason: "Client requested a new time"
+});
+assert.equal(updatedAppointment.status, "reschedule_requested");
+assert.equal(updatedAppointment.rescheduleReason, "Client requested a new time");

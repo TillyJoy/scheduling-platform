@@ -856,3 +856,4 @@ Privacy and anonymity are architectural concerns. Anonymous survey configuration
 Survey invitations and responses should participate in the platform's normal notification, authentication/authorization, audit, tenant-isolation, and durable-persistence boundaries when implemented.
 
 This capability must not introduce industry-specific survey logic or make surveys a prerequisite for scheduling or work completion.
+

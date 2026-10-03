@@ -55,7 +55,7 @@ async function runMigrations(pool, migrationsDir = path.join(__dirname, "../migr
   `);
 
   const files = fs.readdirSync(migrationsDir)
-    .filter(file => /^\\d+_.*\\.sql$/.test(file))
+    .filter(file => /^\d+_.*\.sql$/.test(file))
     .sort();
 
   for (const file of files) {

@@ -7,4 +7,5 @@ test("relationship model preserves historical ranges",()=>{
  assert.throws(()=>new ClientPropertyRelationship({id:"missing-start",organizationId:"org-1",clientId:"client-1",propertyId:"property-1",relationshipType:"resident",startAt:null}),/startAt is required/);
  assert.throws(()=>new ClientPropertyRelationship({id:"empty-start",organizationId:"org-1",clientId:"client-1",propertyId:"property-1",relationshipType:"resident",startAt:""}),/startAt is required/);
  assert.throws(()=>new ClientPropertyRelationship({id:"bad",organizationId:"org-1",clientId:"client-1",propertyId:"property-1",relationshipType:"resident",startAt:"2026-02-01T00:00:00Z",endAt:"2026-01-01T00:00:00Z"}),/endAt must be after startAt/);
+ assert.throws(()=>new ClientPropertyRelationship({id:"bad-null",organizationId:"org-1",clientId:"client-1",propertyId:"property-1",relationshipType:"resident",startAt:null}),/startAt is required/);
 });

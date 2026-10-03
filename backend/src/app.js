@@ -20,6 +20,8 @@ const { ResourceRepository } = require("./repositories/resourceRepository");
 const { QualificationRepository } = require("./repositories/qualificationRepository");
 const { ResourceQualificationRepository } = require("./repositories/resourceQualificationRepository");
 const { AvailabilityRepository } = require("./repositories/availabilityRepository");
+const { AppointmentRepository } = require("./repositories/appointmentRepository");
+const { SchedulingHoldRepository } = require("./repositories/schedulingHoldRepository");
 const { ResourceService } = require("./services/resourceService");
 const { QualificationService } = require("./services/qualificationService");
 const { ResourceQualificationService } = require("./services/resourceQualificationService");
@@ -79,6 +81,8 @@ function createAppState(seed = {}) {
   const qualificationRepository = databasePool ? new QualificationRepository({ pool: databasePool }) : null;
   const resourceQualificationRepository = databasePool ? new ResourceQualificationRepository({ pool: databasePool }) : null;
   const availabilityRepository = databasePool ? new AvailabilityRepository({ pool: databasePool }) : null;
+  const appointmentRepository = databasePool ? new AppointmentRepository({ pool: databasePool }) : null;
+  const schedulingHoldRepository = databasePool ? new SchedulingHoldRepository({ pool: databasePool }) : null;
   const resourceStore = new Map(resources.map(resource => [JSON.stringify([resource.organizationId || "demo-org", resource.id]), resource]));
   const qualificationStore = new Map();
   const resourceQualificationStore = new Map();
@@ -133,7 +137,10 @@ function createAppState(seed = {}) {
     appointmentStore,
     holdStore: new Map(),
     schedulingHolds: holds,
-    schedulingService
+    schedulingService,
+    appointmentRepository,
+    schedulingHoldRepository,
+    transaction
   });
 
   const fieldVisitStore = new Map(fieldVisits.map(visit => [JSON.stringify([visit.organizationId, visit.id]), visit]));
@@ -198,7 +205,7 @@ function principal() {
   return {
     userId: "demo-user",
     organizationId: "demo-org",
-    permissions: ["job:create", "job:read", "workOrder:create", "workOrder:read", "appointment:create", "appointment:read", "appointment:confirm", "appointment:cancel", "fieldVisit:create", "fieldVisit:read", "fieldVisit:update", "actualWork:create", "actualWork:read", "fieldExecution:sync"]
+    permissions: ["job:create", "job:read", "workOrder:create", "workOrder:read", "appointment:create", "appointment:read", "appointment:update", "appointment:confirm", "appointment:cancel", "fieldVisit:create", "fieldVisit:read", "fieldVisit:update", "actualWork:create", "actualWork:read", "fieldExecution:sync"]
   };
 }
 
@@ -474,7 +481,7 @@ function createHandler(state, {
         if (input.organizationId && input.organizationId !== p.organizationId) {
           return json(res, 403, { error: "Not authorized for the requested organization" });
         }
-        const appointment = state.appointmentService.create({
+        const appointment = await state.appointmentService.create({
           ...input,
           principal: p,
           organizationId: p.organizationId,

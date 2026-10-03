@@ -64,9 +64,9 @@ class AppointmentRepository {
     const result = await db.query(
       `UPDATE appointments
        SET department_id=$3, client_id=$4, property_id=$5, work_order_id=$6, team_id=$7, zone_id=$8,
-           start_time=$8, end_time=$9, status_code=$10, scheduler_id=$11,
-           client_scheduling_indicator=$12, internal_notes=$13, cancellation_reason=$14,
-           reschedule_reason=$15, updated_at=$16
+           start_time=$9, end_time=$10, status_code=$11, scheduler_id=$12,
+           client_scheduling_indicator=$13, internal_notes=$14, cancellation_reason=$15,
+           reschedule_reason=$16, updated_at=$17
        WHERE organization_id=$1 AND id=$2
        RETURNING *`,
       [principal.organizationId, record.id, record.departmentId, record.clientId, record.propertyId,

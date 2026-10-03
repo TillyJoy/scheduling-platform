@@ -107,6 +107,16 @@ if (!process.env.DATABASE_URL || process.env.RUN_POSTGRES_TESTS !== "1") {
     assert.equal(firstOrder.number, "WO-1");
     assert.equal(firstOrder.statusCode, "planned");
 
+    await assert.rejects(
+      () => workOrderService.create({
+        principal: principalA,
+        id: "wo-1",
+        jobId: "job-1",
+        number: "CUSTOM-2026-DUPLICATE-ID"
+      }),
+      /Work order ID already exists/
+    );
+
     const manualOrder = await workOrderService.create({
       principal: principalA,
       id: "wo-manual",

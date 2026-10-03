@@ -634,3 +634,4 @@ These relationships must respect organization isolation, permissions, privacy re
 Survey capability should remain domain-neutral. Organizations may configure survey definitions and lifecycle behavior rather than requiring organization-specific code.
 
 This capability should eventually support both operational follow-up and reporting/analytics while preserving the distinction between survey response data and derived reports.
+

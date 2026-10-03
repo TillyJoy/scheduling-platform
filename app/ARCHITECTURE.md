@@ -30,20 +30,22 @@ The frontend should communicate with the backend through the API.
 
 The frontend must not directly access the production database.
 
-The MVP is one responsive browser-based application, not separate platform-specific applications. It is intended to support:
+The MVP requires platform-appropriate client applications sharing one platform backend and authoritative data model. The desktop/browser client is one responsive web application for Chromebook, Windows PC, and macOS. The mobile/tablet client is a functional native/mobile application for Android phone/tablet, iPhone, and iPad.
 
-- Chromebook
-- Windows PC
-- macOS
-- Android phone/tablet
-- iPhone
-- iPad
+The client split is:
 
-The same deployed web application, shared backend/API, and authoritative data model serve these supported platform classes. Responsive layout, input/interaction behavior, authentication, and feature behavior must be appropriate to the applicable desktop, phone, and tablet form factors.
+| Platform | MVP client requirement |
+| --- | --- |
+| Chromebook | Responsive web application |
+| Windows PC | Responsive web application |
+| macOS | Responsive web application |
+| Android phone/tablet | Functional native/mobile application |
+| iPhone | Functional native/mobile application |
+| iPad | Functional native/tablet application |
 
-This is an MVP platform-compatibility requirement, not evidence that any supported platform has been interactively verified. Production deployment and browser verification remain separate status items.
+The web and native/mobile clients use the same backend/API and authoritative data model. Core business rules, tenant isolation, authorization, scheduling logic, persistence, auditability, and integration behavior remain platform-neutral and must not be duplicated as independent client-side domain implementations.
 
-Future native mobile applications may use the same API, but native platform-specific applications are not required for the MVP.
+This is an MVP platform requirement, not evidence that any platform has been interactively verified. Production deployment, client implementation, feature completeness, and platform verification remain separate status items. Native/mobile applications are now an explicit MVP requirement for Android, iPhone, and iPad.
 
 ## Backend API
 

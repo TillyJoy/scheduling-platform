@@ -28,7 +28,7 @@ CREATE POLICY jobs_tenant_isolation ON jobs
   WITH CHECK (organization_id = current_setting('app.organization_id', true));
 
 CREATE TABLE IF NOT EXISTS work_orders (
-  id TEXT PRIMARY KEY,
+  id TEXT NOT NULL,
   organization_id TEXT NOT NULL REFERENCES organizations(id),
   job_id TEXT NOT NULL,
   number TEXT NOT NULL,
@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS work_orders (
   metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (organization_id, id),
+  PRIMARY KEY (organization_id, id),
   UNIQUE (organization_id, number),
   FOREIGN KEY (organization_id, job_id)
     REFERENCES jobs (organization_id, id)

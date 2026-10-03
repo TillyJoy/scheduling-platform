@@ -217,8 +217,8 @@ test("durable Appointment / Hold persistence is tenant-safe, auditable, transact
     () => transaction(principalA, "test.rollback", async db => {
       await db.query(
         `INSERT INTO appointments(id,organization_id,client_id,property_id,start_time,end_time,status_code)
-         VALUES ('rollback-appointment',$1,clientA, propertyA,'2026-10-01T18:00:00Z','2026-10-01T19:00:00Z','scheduled')`,
-        [orgA]
+         VALUES ('rollback-appointment',$1,$2,$3,'2026-10-01T18:00:00Z','2026-10-01T19:00:00Z','scheduled')`,
+        [orgA, clientA, propertyA]
       );
       await db.query(
         `INSERT INTO audit_events(id,organization_id,user_id,action,entity_type,entity_id)

@@ -256,23 +256,140 @@ Actions originating from:
 
 should be distinguishable.
 
+## Identity, Organizations, and Authorization
+
+The platform identity model must distinguish domain identity from authenticated access.
+
+### Person
+
+A Person represents an individual known to an organization. A Person does not automatically have a platform login.
+
+Possible organization-defined uses include customers, applicants, contractors, field workers, contacts, and representatives.
+
+**Person ≠ User.**
+
+### User
+
+A User represents an authenticated platform account. A User may be associated with a Person, but the association is not required.
+
+Existing domain terms such as Client, Auditor, and Contractor must not be interpreted as replacements for the generalized Person/User distinction. Their detailed domain semantics remain defined by their respective architecture sections.
+
+### Organization Membership
+
+Organization Membership is the abstraction that establishes a User's relationship to an Organization.
+
+Membership determines or provides the applicable:
+
+- Organization access
+- Roles
+- Permissions
+- Administrative privileges
+- Resource visibility
+- Data visibility
+
+A User may belong to one or more Organizations if multi-organization accounts are supported. The active organization context must be established from the trusted principal and validated server-side.
+
+### Roles and Permissions
+
+Roles are configurable organizational constructs. Roles group permissions but are not themselves the sole security authority.
+
+Permissions are action-oriented and independently enforceable. Examples include:
+
+- `organization:read`
+- `organization:update`
+- `user:create`
+- `user:manage`
+- `resource:create`
+- `resource:assign`
+- `job:create`
+- `job:update`
+- `appointment:create`
+- `appointment:manage`
+- `status:transition`
+- `notification:manage`
+- `integration:manage`
+- `billing:manage`
+- `report:read`
+
+Organizations may define their own roles using available platform permissions. Authorization follows least-privilege principles.
+
+### Trusted Principal and Authorization
+
+Application authorization consumes a trusted authenticated principal rather than depending on a particular authentication implementation.
+
+Sensitive operations must establish, as applicable:
+
+1. A trusted authenticated principal
+2. Valid Organization Membership
+3. The required permission
+4. The target record's Organization
+5. Any additional record- or action-specific authorization requirements
+
+Caller-supplied Organization IDs must never establish authorization or membership.
+
+Record organization must be validated server-side before access or mutation.
+
+Security controls must not depend solely on the user interface.
+
+### Tenant Isolation
+
+Organization is the primary tenant boundary.
+
+Organization-owned records and configuration must be organization-scoped by default. Users and service identities must not access another Organization's data, configuration, notifications, or credentials unless an explicitly authorized cross-organization capability exists.
+
+### Audit Identity
+
+Audit actor identity must be derived from the trusted authenticated principal.
+
+Arbitrary caller-provided actor IDs must not be trusted for security-sensitive actions.
+
+Audit records should identify the actor, Organization, action, target, timestamp, and relevant change/source information where applicable.
+
+### Technical and Service Identities
+
+The architecture may support non-human technical identities, including API clients, integration accounts, automated services, scheduled processes, and webhook processors.
+
+A technical identity must have:
+
+- Explicit Organization scope
+- Explicit permissions
+- Auditable actions
+
+Technical identities must not automatically inherit human administrator privileges.
+
+### Authentication Independence
+
+Authentication is separate from the domain model and authorization model.
+
+The platform may support different authentication mechanisms, including password authentication, SSO, OAuth, enterprise identity providers, MFA, and service/API authentication.
+
+The domain/application authorization layer consumes the trusted principal and its established Organization context rather than depending on a specific authentication provider.
+
 ## Authentication
 
 Authentication should be handled centrally.
+
+Authentication establishes a trusted principal. It must not itself be responsible for domain authorization decisions.
+
+Authentication providers must remain replaceable without changing the core domain model.
 
 The system should support secure authentication methods described in `SECURITY.md`.
 
 ## Authorization
 
-Authorization should occur in the backend.
+Authorization must occur server-side.
 
-Permissions should be based on:
+Authorization must use the trusted authenticated principal and applicable Organization Membership. Caller-supplied Organization IDs must not establish authorization.
 
-- Organization
-- Department
-- Role
-- Resource
-- Action
+Authorization must validate:
+
+- Organization membership
+- Required permission
+- Target record organization
+- Applicable resource/department scope
+- Action-specific rules
+
+Permissions should remain action-oriented and configurable. Department and resource restrictions may further constrain access where applicable.
 
 ## Multi-Organization Architecture
 

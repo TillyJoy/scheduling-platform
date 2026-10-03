@@ -508,6 +508,194 @@ This supports rules such as:
 
 ---
 
+# Operational Work: Jobs and Work Orders
+
+A **Job** represents a unit of operational work managed by the organization. A Job is distinct from the scheduled time used to perform work and from the record of work actually performed.
+
+Jobs may originate from:
+
+- Application
+- Intake
+- Referral
+- Manual creation
+- Recurring work
+- External integration
+- Other configured workflows
+
+A Job may be associated with a Person, Organization, Location/Property, Service Definition, Application, Work Orders, Resources, Assignments, Appointments, Field Visits, Documents, Communications, Billing records, Funding records, and Audit History as applicable. These relationships are optional unless required by an organization's configured workflow.
+
+The existing **Service** entity serves as the configurable service definition. It must remain distinct from actual work performed.
+
+## Job Lifecycle
+
+Job statuses and lifecycle transitions are organization-configurable. The platform must not impose a universal Job lifecycle.
+
+Examples may include:
+
+**New → Ready → Active → Completed → Closed**
+
+Another organization may use different terminology, states, transitions, permissions, and automation.
+
+The existing configurable status framework governs Job lifecycle behavior rather than creating a separate Job-specific status architecture.
+
+## Work Order
+
+A **Work Order** represents planned, defined, or executable work associated with a Job.
+
+A Job may contain:
+
+- One Work Order
+- Multiple Work Orders
+- Sequential Work Orders
+- Parallel Work Orders
+- Parent/child Work Orders
+
+A Work Order may have its own configurable status, assignments, scheduling references, documentation, dependencies, and completion information.
+
+A Work Order does not replace the Job and does not become the Appointment.
+
+## Work Order Number
+
+Work Orders require unique identifiers. Numbering must be configurable and organization-scoped.
+
+Supported patterns may include:
+
+- Numeric
+- Alphanumeric
+- Prefixes
+- Suffixes
+- Year/date components
+- Service/program components
+- Organization-defined patterns
+- Automatic numbering
+- Manual numbering where authorized
+
+Configuration may include:
+
+- Prefix
+- Starting number
+- Sequence
+- Date components
+- Service components
+- Random components where appropriate
+- Length
+- Allowed characters
+- Separators
+- Reset behavior where permitted
+
+Uniqueness must be enforced regardless of the configured numbering method.
+
+**Work Order Number is distinct from the existing Job Number concept.** Existing Job Numbers must not be reinterpreted as Work Order Numbers merely because both are identifiers associated with work or services.
+
+## Manual Work Order Number Modification
+
+Where organizational policy permits, authorized users may modify a Work Order Number.
+
+Modification must be:
+
+- Permission controlled
+- Validated
+- Uniquely enforced
+- Audited
+
+The previous identifier must remain recoverable through audit/history.
+
+## Work Order Dependencies
+
+Organizations may configure dependencies between Work Orders, including:
+
+- Sequential work
+- Prerequisites
+- Parent/child relationships
+- Parallel work
+- Required completion
+- Approval dependencies
+- Conditional dependencies
+
+Dependency behavior must remain configuration-driven and industry-neutral.
+
+## Planned Work, Scheduled Time, and Actual Work
+
+The platform must preserve three distinct concepts:
+
+1. **Planned/defined work** — represented by the Job and, where applicable, its Work Orders.
+2. **Scheduled time** — represented by Appointments.
+3. **Actual work performed** — represented by Field Visits or another configured operational execution record where applicable.
+
+These concepts must not be collapsed into one record.
+
+Therefore:
+
+- **Job ≠ Work Order**
+- **Job ≠ Appointment**
+- **Work Order ≠ Appointment**
+- **Appointment ≠ Field Visit**
+- **Work Order ≠ Field Visit**
+
+An Appointment represents scheduled time or a scheduled occurrence. It does not by itself prove that work was performed.
+
+A Field Visit records an instance of actual field execution when that operational concept is applicable.
+
+The detailed Field Visit/Actual Work implementation should remain in its established architecture rather than being duplicated in this document.
+
+## Job Documents
+
+Jobs may contain or reference:
+
+- Intake documents
+- Contracts
+- Photos
+- Work documentation
+- Reports
+- Completion records
+- Supporting evidence
+
+Document access must be permission-aware, tenant-scoped, and auditable. Documents may also be associated directly with a Work Order, Appointment, Field Visit, or other applicable entity.
+
+## Job and Work Order History
+
+Important Job and Work Order events must be retained as business history and/or audit events as appropriate.
+
+Examples include:
+
+- Creation
+- Assignment
+- Scheduling
+- Status changes
+- Rescheduling
+- Cancellation
+- Completion
+- Reopening
+- Billing events
+- Integration synchronization
+- Significant configured workflow events
+
+History should preserve, where applicable:
+
+- What changed
+- Previous value
+- New value
+- Who or what initiated the change
+- Date/time
+- Source or integration
+- Related entity
+
+Business history remains distinct from the technical Audit Log, consistent with the existing product architecture.
+
+## Domain Relationships
+
+A Job may have multiple Appointments, and a Work Order may reference one or more scheduling occurrences as required by configuration.
+
+Scheduling remains the responsibility of the Appointment/Scheduling architecture. Operational work remains the responsibility of the Job/Work Order architecture.
+
+This preserves the established separation:
+
+**Job → Work Orders → scheduling references → Appointments → actual execution records**
+
+The relationship is conceptual and configurable; it does not require every Job, Work Order, Appointment, or Field Visit to exist for every workflow.
+
+---
+
 # 19. Zone
 
 A Zone represents a geographic scheduling area.

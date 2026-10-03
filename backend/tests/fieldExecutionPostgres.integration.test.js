@@ -18,6 +18,9 @@ if (!process.env.DATABASE_URL || process.env.RUN_POSTGRES_TESTS !== "1") {
     const pool = createDatabasePool();
     const organizationId = `postgres-field-execution-test-${process.pid}-${Date.now()}`;
     const roleName = `field_execution_app_test_${process.pid}`;
+    const dropTestRole = async () => {
+      await pool.query(`DO $ BEGIN IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${roleName}') THEN EXECUTE 'DROP OWNED BY "${roleName}"'; EXECUTE 'DROP ROLE "${roleName}"'; END IF; END $`);
+    };
     t.after(async () => {
       try {
         await withTransaction(pool, { organizationId, userId: "cleanup", action: "test.cleanup" }, async db => {
@@ -28,11 +31,12 @@ if (!process.env.DATABASE_URL || process.env.RUN_POSTGRES_TESTS !== "1") {
           await db.query("DELETE FROM organizations WHERE id = $1", [organizationId]);
         });
       } finally {
-        await pool.query(`DROP ROLE IF EXISTS "${roleName}"`);
+        await dropTestRole();
         await pool.end();
       }
     });
     await runMigrations(pool);
+    await dropTestRole();
     await pool.query(`CREATE ROLE "${roleName}" NOLOGIN NOSUPERUSER NOBYPASSRLS`);
     await pool.query(`GRANT USAGE ON SCHEMA public TO "${roleName}"`);
     await pool.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON organizations, field_visits, actual_work, field_execution_operations TO "${roleName}"`);

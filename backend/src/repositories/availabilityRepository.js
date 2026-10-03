@@ -13,11 +13,11 @@ class AvailabilityRepository {
     const now = this.clock();
     const result = await db.query(
       `INSERT INTO availability
-        (id,organization_id,resource_id,start_time,end_time,zone_id,available,created_at,updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8)
+        (id,organization_id,resource_id,start_time,end_time,zone_id,available)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
        RETURNING *`,
       [record.id, principal.organizationId, record.resourceId, record.startTime, record.endTime,
-        record.zoneId, record.available, now]
+        record.zoneId, record.available]
     );
     const saved = this.#map(result.rows[0]);
     await this.#audit(principal, "availability.created", saved.id, null, saved, db, now);
@@ -56,10 +56,10 @@ class AvailabilityRepository {
     const now = this.clock();
     const result = await db.query(
       `UPDATE availability
-       SET resource_id=$3,start_time=$4,end_time=$5,zone_id=$6,available=$7,updated_at=$8
+       SET resource_id=$3,start_time=$4,end_time=$5,zone_id=$6,available=$7
        WHERE organization_id=$1 AND id=$2
        RETURNING *`,
-      [principal.organizationId, record.id, record.resourceId, record.startTime, record.endTime, record.zoneId, record.available, now]
+      [principal.organizationId, record.id, record.resourceId, record.startTime, record.endTime, record.zoneId, record.available]
     );
     const saved = this.#map(result.rows[0]);
     await this.#audit(principal, "availability.updated", saved.id, existing, saved, db, now);

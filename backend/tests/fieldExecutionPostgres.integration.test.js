@@ -19,7 +19,7 @@ if (!process.env.DATABASE_URL || process.env.RUN_POSTGRES_TESTS !== "1") {
     const organizationId = `postgres-field-execution-test-${process.pid}-${Date.now()}`;
     const roleName = `field_execution_app_test_${process.pid}`;
     const dropTestRole = async () => {
-      await pool.query(`DO $ BEGIN IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${roleName}') THEN EXECUTE 'DROP OWNED BY "${roleName}"'; EXECUTE 'DROP ROLE "${roleName}"'; END IF; END $;`);
+      await pool.query(`DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${roleName}') THEN EXECUTE 'DROP OWNED BY "${roleName}"'; EXECUTE 'DROP ROLE "${roleName}"'; END IF; END $$;`);
     };
     t.after(async () => {
       try {

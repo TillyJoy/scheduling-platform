@@ -242,6 +242,18 @@ Notification and communication preferences are a first-class architectural requi
 
 This is an architectural requirement only. The existence of the notification foundation does not imply that notification preferences are currently implemented, and this requirement does not by itself add notification preferences to MVP implementation scope.
 
+Mandatory communications are also a first-class architectural requirement. The architecture must distinguish:
+
+- mandatory communications that cannot be disabled by applicable recipient preference;
+- preference-controlled or optional communications; and
+- organization-configured communication requirements that define when, for whom, and through which permitted channels a communication is required.
+
+Mandatory status must be evaluated during notification processing and must interact with notification rules, recipient resolution, recipient/channel preferences, permissions, tenant isolation, auditability, delivery-channel fallback, retry, failure, and escalation behavior. Required communications remain required when an initial delivery attempt fails; applicable retry, fallback, failure, and escalation handling must preserve that requirement.
+
+Organizations configure these requirements through the shared notification architecture. Mandatory communications are not hard-coded for a specific organization. This is an architectural/future capability requirement and does not by itself add mandatory communications to MVP implementation scope or imply that the current notification foundation implements them.
+
+Restriction or unservable alerts remain configurable notification behavior. The platform must not hard-code a particular organization's definition of a restriction, unservable condition, recipient, channel, escalation, or message. Such alerts are produced through organization-configured rules and the shared notification/recipient-resolution architecture.
+
 ## Integration Security
 
 External credentials must never be stored in source code.

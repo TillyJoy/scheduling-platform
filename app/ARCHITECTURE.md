@@ -30,13 +30,20 @@ The frontend should communicate with the backend through the API.
 
 The frontend must not directly access the production database.
 
-The system should support responsive web interfaces for:
+The MVP is one responsive browser-based application, not separate platform-specific applications. It is intended to support:
 
-- Desktop
-- Tablet
-- Mobile
+- Chromebook
+- Windows PC
+- macOS
+- Android phone/tablet
+- iPhone
+- iPad
 
-Future native mobile applications may use the same API.
+The same deployed web application, shared backend/API, and authoritative data model serve these supported platform classes. Responsive layout, input/interaction behavior, authentication, and feature behavior must be appropriate to the applicable desktop, phone, and tablet form factors.
+
+This is an MVP platform-compatibility requirement, not evidence that any supported platform has been interactively verified. Production deployment and browser verification remain separate status items.
+
+Future native mobile applications may use the same API, but native platform-specific applications are not required for the MVP.
 
 ## Backend API
 

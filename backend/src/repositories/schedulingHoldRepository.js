@@ -21,7 +21,7 @@ class SchedulingHoldRepository {
       [record.id,principal.organizationId,record.schedulerId,record.clientId,record.propertyId,record.workOrderId,
        record.departmentId,record.zoneId,record.startTime,record.endTime,record.expiresAt,record.status,now]
     );
-    const saved = this.#map(result.rows[0]);
+    const saved = this.#map(result.rows[0], record.memberIds);
     await this.#replaceResources({ principal, hold: saved, db });
     await this.#audit(principal, "scheduling-hold.created", saved.id, null, saved, db, now);
     return saved;

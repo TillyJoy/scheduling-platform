@@ -757,3 +757,26 @@ Implemented:
 - post-commit preservation of existing audit and domain-event behavior
 
 The PostgreSQL integration test verifies migration execution, RLS context, persistence across service instances, duplicate replay, payload mismatch detection, version conflicts, and Actual Work persistence.
+
+## Authoritative Durable Persistence Migration Sequence
+
+The project has approved the following as the **default implementation order for incremental durable persistence migration**:
+
+1. Client
+2. Property / Unit / Client relationships
+3. Job / Work Order
+4. Resource / Qualification / Availability
+5. Appointment / Hold
+6. Assignment
+7. Field Visit / Actual Work
+8. Notifications / Domain Events / Outbox consumers
+
+This is the project's default **overall** durable-persistence migration sequence. It includes stages that are already durably implemented for completeness, dependency context, and migration history; already-completed migrations are not repeated. Implementation proceeds from the first applicable incomplete persistence slice. Based on the current repository state, Client and Field Visit / Actual Work persistence already exist. Property / Unit / Client relationship persistence remains incomplete, so it is the next applicable slice. Job / Work Order is the following slice.
+
+This clarification does not change the approved eight-step sequence or MVP scope. The sequence may be adjusted only when a concrete architectural dependency, technical constraint, or implementation finding requires a different order. Any material deviation must be documented in the authoritative Open Questions/architecture records before implementation proceeds.
+
+This decision does not require all stages to be implemented immediately, does not expand MVP scope by itself, and does not authorize unrelated runtime functionality.
+
+**Current authorization:** Property / Unit / Client relationship persistence is the next authorized durable-persistence slice, subject to the normal implementation review, testing, and verification requirements.
+
+This decision establishes migration order only; it does not create a new architecture layer or replace the existing domain boundaries.

@@ -226,7 +226,7 @@ The organization may use a rule where a multi-unit property becomes eligible whe
 
 The Scheduling Platform must support receiving and displaying the result of this rule from Monday.com.
 
-The Scheduling Platform should not silently replace the organization's Monday.com eligibility determination.
+When Monday.com is configured as an authority for a particular eligibility field or determination outcome, the Scheduling Platform must preserve that configured authority and synchronization behavior. This does not make Monday.com the core domain model: the platform retains its own structured Eligibility Determination representation and audit/history model, and no global assumption is made that Monday.com is authoritative for all eligibility data.
 
 ## Prior Work
 

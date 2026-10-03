@@ -78,6 +78,318 @@ External systems and the scheduling platform must be able to exchange informatio
 
 ---
 
+
+# Architectural Section 4 — Intake, Application, Vetting, Eligibility & Service Restrictions
+
+This section defines the industry-neutral intake and pre-operational decision architecture. It is documentation only; it does not require runtime implementation as part of this transfer.
+
+The core lifecycle is:
+
+**Intake → Application → Vetting → Eligibility Determination → configurable outcome → potentially Job**
+
+The following boundaries are mandatory:
+
+- **Intake** is the receipt and routing of information or a request.
+- **Application** is the request/submission and is a first-class domain concept.
+- **Application ≠ Job.** An Application may result in zero, one, or multiple Jobs according to configuration and workflow.
+- **Vetting** is the review/verification process.
+- **Eligibility Determination ≠ Eligibility Boolean.** Eligibility is a structured, auditable determination with rules, evidence, reviewer, dates, outcomes, exceptions, and history.
+- **Evidence** is supporting information used by vetting or a determination.
+- **Service Restriction** is a configurable limitation or warning and is distinct from eligibility.
+- **Job** represents authorized operational work; it is not created merely because an intake or application exists.
+
+## 4.1 Intake
+
+Intake is the configurable entry point for information, requests, referrals, or potential service demand.
+
+Supported intake sources may include:
+
+- Public/online forms
+- Staff entry
+- Referrals
+- Phone or email
+- Client/participant portals
+- API integrations
+- External systems
+- Imports
+- Other organization-configured sources
+
+Intake must support configurable routing and field mappings. An intake may create or update a Person, Organization, Location/Property, Application, or other configured record, or attach information to an existing record.
+
+Intake must remain distinct from Application. Receiving information does not by itself create a Job.
+
+## 4.2 Intake Forms
+
+Organizations must be able to configure intake forms without changing core application code.
+
+Forms may define:
+
+- Fields and field types
+- Required fields
+- Conditional questions and sections
+- Validation rules
+- Custom terminology
+- Multiple applicants/household or related-party information where applicable
+- Signatures and attestations
+- Required document collection
+- Document replacement/renewal requirements
+- Evidence-linked responses
+- Save-and-return behavior
+- Versioning
+- Availability to public, authenticated, staff, or other configured audiences
+- Permissions
+- Retention and audit behavior
+
+Form definitions and submitted responses must be distinguishable so historical submissions remain reconstructable when a form changes.
+
+## 4.3 Application
+
+An Application is a first-class record representing a request or submission for consideration.
+
+An Application may reference:
+
+- Person or people
+- Organization/household where applicable
+- Service or program request
+- Property/Location
+- Referral source
+- Intake source
+- Required information
+- Required documents/evidence
+- Vetting tasks
+- Eligibility Determinations
+- Funding evaluation
+- Approvals
+- Jobs
+- Notes
+- History
+
+Application data must not be conflated with the Job record.
+
+Application types, fields, sections, required information, documents, signatures, rules, reviewers, permissions, routing, notifications, and other workflow behavior must be configurable.
+
+## 4.4 Application Status
+
+Application statuses and workflow transitions must be configurable.
+
+Configuration may define:
+
+- Statuses
+- Allowed transitions
+- Transition conditions
+- Required actions
+- Required information/documents
+- Reviewer or approver requirements
+- Permissions
+- Notifications
+- Tasks
+- Automation
+- Escalation behavior
+- Public/internal visibility
+
+An Application may be pending, under review, awaiting information, approved, denied, withdrawn, closed, or in another organization-defined state.
+
+Status history must be retained for auditability.
+
+## 4.5 Vetting
+
+Vetting is the configurable review process used to establish whether an Application has the information and conditions necessary for a decision.
+
+Vetting may include:
+
+- Information verification
+- Document verification
+- Identity verification
+- Property/Location verification
+- Eligibility evaluation
+- Funding evaluation
+- Service-restriction or conflict checks
+- External verification
+- Manual review
+- Missing-information tasks
+- Reviewer assignment
+- Escalation
+- Approval steps
+
+Vetting workflow, required steps, reviewers, permissions, deadlines, notifications, and escalation behavior must be configurable.
+
+Funding evaluation must remain distinguishable from eligibility determination even when both occur during the same vetting workflow.
+
+## 4.6 Eligibility
+
+Eligibility must be represented as a structured determination rather than a Boolean field.
+
+An Eligibility Determination may contain:
+
+- Application/reference context
+- Person, property/location, unit, service, program, or funding scope
+- Rule-set and rule-version used
+- Criteria evaluated
+- Evidence considered
+- Determination
+- Reviewer/actor
+- Determination date
+- Effective date
+- Expiration date
+- Reason/explanation
+- Missing information
+- Exceptions
+- Override/approval information
+- Re-certification or review requirements
+- Source
+
+A determination must be auditable and explainable.
+
+## 4.7 Eligibility Rules
+
+Eligibility rules must be configurable and industry-neutral.
+
+Rules may be evaluated:
+
+- Automatically
+- Manually
+- Through a combination of automated and human review
+
+Rules may use organization-defined criteria and may vary by service, program, funding source, location, property, unit, person, or other configured scope.
+
+Rule versions must be retained so a historical determination can be reconstructed using the rules that were actually applied.
+
+## 4.8 Eligibility Outcomes
+
+Eligibility outcomes must be configurable rather than hard-coded to a single Boolean.
+
+Examples include:
+
+- Eligible
+- Ineligible
+- Partially eligible
+- Conditionally eligible
+- Needs review
+- Pending documentation
+- Insufficient information
+- Expired
+- Exception approved
+- Other organization-defined outcomes
+
+Outcomes may control subsequent workflow, visibility, required actions, notifications, restrictions, or transition eligibility according to configuration.
+
+## 4.9 Evidence
+
+Evidence is information supporting a vetting step or Eligibility Determination.
+
+Evidence may include:
+
+- Documents
+- Form responses
+- Verified data
+- External verification results
+- Staff-entered information
+- Other organization-defined evidence
+
+Evidence must remain traceable to the relevant Application, vetting/review step, and/or determination.
+
+Evidence metadata should preserve source, verification state, dates, document/version identity where applicable, and retention/audit information.
+
+Evidence must not be silently replaced when doing so would destroy the basis for a historical determination.
+
+## 4.10 Eligibility History
+
+Eligibility history must preserve prior determinations and the information needed to reconstruct them.
+
+Historical determinations must be immutable or otherwise protected from destructive overwrite. A later decision, correction, exception, or re-certification must create a new auditable historical state rather than rewriting the prior decision.
+
+History must support:
+
+- Audit
+- Appeals/review
+- Reporting
+- Compliance
+- Historical reconstruction
+- Determination comparison over time
+
+Changes to eligibility rules, evidence, configuration, or current status must not rewrite the historical determination that was previously made.
+
+## 4.11 Service Restrictions & Alerts
+
+Service restrictions are configurable limitations or warnings that may affect whether a Person, Application, Property/Location, Unit, Service, Program, Funding source, or other configured entity may proceed.
+
+Restrictions must not be represented by a hard-coded concept such as an "unservable client."
+
+A restriction may have:
+
+- Configurable scope
+- Effective date
+- Expiration date
+- Trigger/detection rule
+- Reason
+- Visibility
+- Required approval
+- Notification recipients
+- Escalation behavior
+- Documentation requirements
+- Notes
+- Permissions
+- Audit requirements
+
+Restriction handling follows a configurable workflow:
+
+**Detection → Alert → Escalation/Approval where configured → Resolution → Audit**
+
+A restriction may block, warn, require review, or otherwise affect workflow according to configuration. Restrictions are distinct from Eligibility Determinations even when a restriction is triggered by an eligibility or service-history condition.
+
+## 4.12 Restriction Configuration
+
+Organizations must be able to configure restriction rules and behavior without changing core application code.
+
+Configuration may define:
+
+- Scope/entity types
+- Services or programs affected
+- Funding or geographic conditions
+- Property/unit conditions
+- Date or lookback periods
+- Detection logic
+- Visibility by role/permission
+- Approval requirements
+- Notification recipients/channels
+- Escalation paths
+- Required documentation
+- Resolution actions
+- Audit requirements
+
+Restriction rules must be versionable where their historical application needs to be reconstructed.
+
+## 4.13 Transition from Application to Job
+
+The transition from Application to Job must be configurable.
+
+An Application may produce:
+
+- Zero Jobs
+- One Job
+- Multiple Jobs
+
+according to organization-defined workflow and conditions.
+
+Transition configuration may define:
+
+- Eligibility/approval conditions
+- Required documents or evidence
+- Required approvals
+- Required application status
+- Service/program mappings
+- Job templates
+- Data mappings
+- Assignment rules
+- Notifications
+- Audit events
+- Whether additional vetting is required before transition
+
+Creating a Job represents authorization for operational work. It must not be conflated with the Application, Eligibility Determination, Work Order, Appointment, or Field Visit.
+
+This architecture remains industry-neutral and configuration-driven. Organization-specific terminology, rules, thresholds, service restrictions, and workflow behavior belong in configuration rather than the core platform.
+
+
 # 3. Initial Users
 
 The system must support:

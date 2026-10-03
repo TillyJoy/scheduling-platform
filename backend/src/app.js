@@ -371,7 +371,7 @@ function createHandler(state, {
         const visit = action === "arrive"
           ? await state.fieldVisitService.arrive(payload)
           : action === "start"
-            ? state.fieldVisitService.start(payload)
+            ? await state.fieldVisitService.start(payload)
             : action === "stop"
               ? await state.fieldVisitService.stop(payload)
               : action === "complete"

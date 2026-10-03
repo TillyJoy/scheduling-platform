@@ -281,6 +281,48 @@ The system must not lose Client A's historical relationship.
 
 ---
 
+## Generalized Resource, Assignment, and Service Architecture
+
+### Resource
+
+A Resource is the generalized schedulable or operational entity that may be available, qualified, assigned, scheduled, or otherwise consumed by operational work.
+
+**Resource ≠ User.** A User represents authenticated access to the application. A Resource represents an operational capability. A Resource may exist without a User account, and a User does not automatically become a Resource.
+
+Resource types are organization-configurable and may include person/resource staff members, contractors, teams or crews where group scheduling is required, vehicles, equipment, rooms or facilities, and other organization-defined resource types.
+
+Resource configuration may include type, role/capability profile, capabilities, qualifications, qualification documentation and verification, effective dates, expiration dates, status, availability, geographic restrictions, service-specific restrictions, and other organization-defined attributes.
+
+Availability remains separate from the Resource record and may include recurring schedules, exceptions, time-off, blackout periods, geographic restrictions, and service-specific availability.
+
+### Assignment
+
+An Assignment connects one or more Resources to operational work. **Resource ≠ Assignment.** The Assignment is the relationship and lifecycle record; it does not replace the Resource, Service Definition, Operational Work, Scheduled Activity, or Actual Work records.
+
+The Assignment lifecycle must support creation, modification, reassignment, removal, historical tracking, authorization, and audit. Material prior assignments must not be silently overwritten.
+
+Team membership is separate from Assignment. A Team groups Resources; an Assignment connects Resources to operational work.
+
+### Service Definition
+
+A Service Definition describes a type of work an organization offers or performs. **Service Definition ≠ Actual Work.** A Service Definition is configuration, not an occurrence of work.
+
+A Service Definition may configure duration, required Resources or Resource types, required qualifications and capabilities, scheduling rules, eligibility requirements, geographic restrictions, workflow requirements, notification behavior, billing behavior, required documentation, service combinations/add-ons, effective dates, expiration dates, status, and other organization-defined rules.
+
+Eligibility and funding determinations remain separate concepts. A Service Definition may be eligible without being schedulable at a particular time.
+
+The conceptual operational relationship is:
+
+**Service Definition → Operational Work → Assignment → Scheduled Activity → Actual Work**
+
+These concepts must remain distinct; a Service Definition must not be treated as a Job, Appointment, Field Visit, or Actual Work record.
+
+### Auditor and Contractor Reconciliation
+
+Auditor and Contractor remain supported as specialized Resource profiles/resource types where organization-specific scheduling information is required. They are not the core Resource abstraction. Existing specialized qualification, availability, zone, and scheduling information may remain, but must map conceptually to the generalized Resource model.
+
+---
+
 # 11. Service
 
 A Service represents a service that the agency can provide.
@@ -532,9 +574,7 @@ A property may be assigned to one primary scheduling zone.
 
 # 20. Auditor
 
-An Auditor represents a staff member qualified to perform one or more services.
-
-Auditors are users but require additional scheduling-specific information.
+An Auditor is a specialized Resource profile used by organizations that need assessment-specific information. An Auditor may also have a User account, but **Resource ≠ User**; the scheduling Resource remains the operational abstraction.
 
 ## Auditor fields
 
@@ -602,7 +642,7 @@ An Auditor may work in different zones on different days.
 
 # 23. Contractor
 
-A Contractor represents an external contractor who may participate in service delivery.
+A Contractor is a specialized Resource profile used by organizations that engage external service providers. Contractor-specific scheduling information remains supported without making Contractor the core Resource abstraction.
 
 Contractors may be:
 
@@ -648,10 +688,9 @@ The application should maintain internal calendars for scheduling resources.
 
 A calendar may belong to:
 
-- Auditor
-- Contractor
+- Resource
 - Department
-- Other schedulable resource
+- Other schedulable operational entity
 
 ## Calendar fields
 

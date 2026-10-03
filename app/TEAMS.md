@@ -1,5 +1,7 @@
 # Teams and Multi-Person Assignments
 
+Teams are configurable groupings of Resources. Team membership is distinct from system-user membership: a team member may be a Resource without being a User, and a User does not become a team member merely by having application access.
+
 The Scheduling Platform must support appointments requiring more than one person.
 
 ## Team Types
@@ -14,13 +16,7 @@ An organization may use:
 
 ## Team Members
 
-A team may contain:
-
-- Auditors
-- Technicians
-- Contractors
-- Crew members
-- Other organization-defined roles
+A team may contain Resources with organization-defined roles, including people, contractors, technicians, crew members, or other Resource types.
 
 ## Predefined Teams
 
@@ -40,7 +36,7 @@ A predefined team may have:
 
 Schedulers may create a custom team for an individual appointment when permitted.
 
-The custom team may contain any combination of qualified resources.
+The custom team may contain any combination of qualified Resources permitted by organization configuration.
 
 ## Appointment Requirements
 
@@ -143,3 +139,9 @@ Organizations determine:
 - Whether custom teams are permitted
 - Required qualifications
 - Maximum team size
+
+## Resource Boundary
+
+A Team is a grouping of Resources for operational purposes. It is not a system-user group and does not define authentication or application permissions.
+
+A Resource is not an Assignment. An Assignment connects Resources to operational work and records the relevant assignment lifecycle independently of team membership.

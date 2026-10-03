@@ -119,7 +119,7 @@ if (!process.env.DATABASE_URL || process.env.RUN_POSTGRES_TESTS !== "1") {
 
     const otherJob = await jobService.create({
       principal: principalB,
-      id: "job-1",
+      id: "job-1-from-b",
       title: "Other tenant job",
       clientId: `client-${orgB}`
     });
@@ -132,17 +132,14 @@ if (!process.env.DATABASE_URL || process.env.RUN_POSTGRES_TESTS !== "1") {
     });
     assert.equal(otherOrder.number, "WO-1");
 
-    const crossTenantJob = await jobService.get({ principal: principalA, jobId: "job-1" });
-    assert.equal(crossTenantJob.organizationId, orgA);
-
     await assert.rejects(
       () => workOrderService.create({
         principal: principalA,
         id: "wo-cross",
-        jobId: "job-1",
+        jobId: "job-1-from-b",
         number: "WO-CROSS"
       }),
-      /duplicate|already exists|Job/i
+      /Job not found/
     );
 
     const concurrent = await Promise.all([

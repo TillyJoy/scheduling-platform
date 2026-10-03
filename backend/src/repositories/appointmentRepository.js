@@ -16,7 +16,7 @@ class AppointmentRepository {
         (id, organization_id, department_id, client_id, property_id, work_order_id, team_id, zone_id,
          start_time, end_time, status_code, scheduler_id, client_scheduling_indicator,
          internal_notes, cancellation_reason, reschedule_reason, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$17)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
        RETURNING *`,
       [record.id, principal.organizationId, record.departmentId, record.clientId, record.propertyId,
        record.workOrderId, record.teamId, record.zoneId, record.startTime, record.endTime, record.status,
@@ -25,7 +25,7 @@ class AppointmentRepository {
     );
     const saved = this.#map(result.rows[0]);
     await this.#replaceChildren({ principal, appointment: saved, db });
-    await this.#recordHistory(principal, saved, "scheduled", null, saved, db, now);
+    await this.#recordHistory(principal, saved, "created", null, saved, db, now);
     await this.#audit(principal, "appointment.created", saved.id, null, saved, db, now);
     return saved;
   }

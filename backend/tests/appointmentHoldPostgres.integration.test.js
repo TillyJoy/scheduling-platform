@@ -114,7 +114,7 @@ test("durable Appointment / Hold persistence is tenant-safe, auditable, transact
 
   const hold = await appointmentService.createHold({
     principal: principalA, id: "hold-1", clientId: clientA, propertyId: propertyA, workOrderId: workOrderA,
-    unitIds: ["unit-1"], serviceIds: ["service-opaque-1"], memberIds: ["resource-1"],
+    unitIds: [unitA], serviceIds: ["service-opaque-1"], memberIds: ["resource-1"],
     startTime: "2026-10-01T11:00:00Z", endTime: "2026-10-01T12:00:00Z", expiresAt: "2026-10-01T08:15:00Z"
   });
   assert.equal(hold.status, "active");
@@ -122,7 +122,7 @@ test("durable Appointment / Hold persistence is tenant-safe, auditable, transact
 
   await assert.rejects(
     () => appointmentService.create({
-      principal: principalA, id: "appointment-conflict-hold", clientId: "client-1", propertyId: "property-1",
+      principal: principalA, id: "appointment-conflict-hold", clientId: clientA, propertyId: propertyA,
       memberIds: ["resource-1"], serviceIds: ["service-opaque-1"],
       startTime: "2026-10-01T11:30:00Z", endTime: "2026-10-01T12:30:00Z"
     }),
@@ -137,7 +137,7 @@ test("durable Appointment / Hold persistence is tenant-safe, auditable, transact
 
   await assert.rejects(
     () => appointmentService.create({
-      principal: principalA, id: "appointment-conflict", clientId: "client-1", propertyId: "property-1",
+      principal: principalA, id: "appointment-conflict", clientId: clientA, propertyId: propertyA,
       memberIds: ["resource-1"], serviceIds: ["service-opaque-1"],
       startTime: "2026-10-01T11:15:00Z", endTime: "2026-10-01T12:15:00Z"
     }),
@@ -145,14 +145,14 @@ test("durable Appointment / Hold persistence is tenant-safe, auditable, transact
   );
 
   const holdToCancel = await appointmentService.createHold({
-    principal: principalA, id: "hold-cancel", clientId: "client-1", propertyId: "property-1",
+    principal: principalA, id: "hold-cancel", clientId: clientA, propertyId: propertyA,
     memberIds: ["resource-1"], startTime: "2026-10-01T13:00:00Z", endTime: "2026-10-01T14:00:00Z",
     expiresAt: "2026-10-01T08:20:00Z"
   });
   assert.equal((await appointmentService.cancelHold({ principal: principalA, holdId: holdToCancel.id })).status, "cancelled");
 
   const holdToExpire = await appointmentService.createHold({
-    principal: principalA, id: "hold-expire", clientId: "client-1", propertyId: "property-1",
+    principal: principalA, id: "hold-expire", clientId: clientA, propertyId: propertyA,
     memberIds: ["resource-1"], startTime: "2026-10-01T14:00:00Z", endTime: "2026-10-01T15:00:00Z",
     expiresAt: "2026-10-01T08:15:00Z"
   });
@@ -171,7 +171,7 @@ test("durable Appointment / Hold persistence is tenant-safe, auditable, transact
 
   await assert.rejects(
     () => appointmentService.create({
-      principal: principalA, id: "cross-tenant-client", clientId: "client-1", propertyId: "property-1",
+      principal: principalA, id: "cross-tenant-client", clientId: clientA, propertyId: propertyA,
       memberIds: ["resource-b-only"], serviceIds: ["service-opaque-1"],
       startTime: "2026-10-01T16:00:00Z", endTime: "2026-10-01T17:00:00Z"
     }),
@@ -217,7 +217,7 @@ test("durable Appointment / Hold persistence is tenant-safe, auditable, transact
     () => transaction(principalA, "test.rollback", async db => {
       await db.query(
         `INSERT INTO appointments(id,organization_id,client_id,property_id,start_time,end_time,status_code)
-         VALUES ('rollback-appointment',$1,'client-1','property-1','2026-10-01T18:00:00Z','2026-10-01T19:00:00Z','scheduled')`,
+         VALUES ('rollback-appointment',$1,clientA, propertyA,'2026-10-01T18:00:00Z','2026-10-01T19:00:00Z','scheduled')`,
         [orgA]
       );
       await db.query(
@@ -238,12 +238,12 @@ test("durable Appointment / Hold persistence is tenant-safe, auditable, transact
 
   const concurrent = await Promise.allSettled([
     appointmentService.create({
-      principal: principalA, id: "concurrent-a", clientId: "client-1", propertyId: "property-1",
+      principal: principalA, id: "concurrent-a", clientId: clientA, propertyId: propertyA,
       memberIds: ["resource-1"], serviceIds: ["service-opaque-1"],
       startTime: "2026-10-01T20:00:00Z", endTime: "2026-10-01T21:00:00Z"
     }),
     appointmentService.create({
-      principal: principalA, id: "concurrent-b", clientId: "client-1", propertyId: "property-1",
+      principal: principalA, id: "concurrent-b", clientId: clientA, propertyId: propertyA,
       memberIds: ["resource-1"], serviceIds: ["service-opaque-1"],
       startTime: "2026-10-01T20:30:00Z", endTime: "2026-10-01T21:30:00Z"
     })

@@ -565,3 +565,131 @@ The initial implementation should prioritize:
 12. Reporting
 
 The system should be tested at each stage before adding the next major component.
+
+
+## Durable Persistence Architecture Contract
+
+Durable persistence is integrated incrementally behind the existing domain and application architecture. This section defines the cross-cutting persistence contract for migrated transactional workflows.
+
+### Dependency Direction
+
+The persistence dependency direction is:
+
+**API / Interface → Application Service → Domain Model / Business Rules → Repository Interface → Persistence Implementation → PostgreSQL**
+
+Domain and application logic must not depend on PostgreSQL-specific implementation details. Repositories own persistence mapping and database interaction; domain models remain independent of database row shape.
+
+### Unit of Work and Transaction Ownership
+
+Application commands that perform a logically atomic state change use a Unit of Work to own the transaction boundary.
+
+The Unit of Work establishes:
+
+- the database transaction;
+- trusted organization and actor context;
+- transaction-bound repository access;
+- audit recording;
+- domain-event recording; and
+- event-outbox recording.
+
+Repositories may participate in an existing Unit of Work. A repository must not silently create or commit an independent transaction when called inside an existing Unit of Work.
+
+Simple reads may use repository operations without an explicit Unit of Work where a transaction is not required.
+
+### Canonical Mutation Boundary
+
+The canonical transactional sequence is:
+
+1. Authenticate and establish the trusted principal.
+2. Establish tenant/user/action database context.
+3. Begin the Unit of Work.
+4. Load the required aggregate/state through repositories.
+5. Authorize the operation.
+6. Validate domain and application rules.
+7. Mutate the domain state.
+8. Persist the state change.
+9. Record the audit event.
+10. Record the resulting domain event.
+11. Record any required event-outbox entry.
+12. Commit the transaction.
+13. Return the result.
+
+The state mutation, required audit record, domain event, and outbox entry are one atomic transaction. Failure of a required step rolls back the entire transaction.
+
+### External Integrations
+
+External integrations must not be performed while holding the core database transaction open.
+
+After the internal transaction commits, background processing may deliver the resulting work to Monday.com, Outlook, notification providers, mapping services, or other external systems.
+
+External-system failure must not roll back an already committed internal business transaction. Integration retry, reconciliation, and failure handling remain responsibilities of the integration/background-processing architecture.
+
+### Tenant Context and Security
+
+Organization scope comes from the authenticated trusted principal and transaction context. Client-supplied organization identifiers must not establish authorization scope.
+
+Tenant isolation is defense in depth:
+
+**Authentication → Authorization → Application tenant scope → Repository tenant scope → PostgreSQL RLS / forced RLS**
+
+Repositories must apply appropriate tenant predicates even when PostgreSQL RLS provides the final database boundary.
+
+### Domain / Database Mapping
+
+Repositories translate between domain/application representations and database representations. Database rows do not need to be identical to domain objects.
+
+Values whose historical meaning must remain stable must be persisted explicitly rather than recomputed from mutable future configuration.
+
+### Concurrency
+
+Where an entity requires optimistic concurrency, updates use a version/precondition and atomically increment the stored version. An update that affects no row because the expected version is stale is reported as a concurrency conflict.
+
+Entity versioning does not replace scheduling conflict protection. Durable scheduling reservations and holds require their own database-enforced concurrency/conflict mechanisms.
+
+### Durable Scheduling Holds
+
+Scheduling holds are durable lifecycle state. They must survive process restart and must not depend solely on in-memory timers.
+
+Expiration processing may be performed by background processing, but the database remains authoritative for hold state and expiration eligibility.
+
+### Reads and Pagination
+
+Interactive list queries must be bounded and deterministic. Keyset pagination is preferred for large or continuously changing collections.
+
+The existing Client persistence slice establishes the current precedent for organization-scoped indexes, deterministic keyset pagination, and bounded page size.
+
+Multi-query reads that require a consistent snapshot may use an explicit read transaction.
+
+### Layered Idempotency
+
+Idempotency is applied at the boundary appropriate to the operation rather than through one universal mechanism. Existing layers include request/operation idempotency, domain-event identity, field-execution operation identity, and notification delivery identity.
+
+Each layer must preserve organization scope and must not weaken the underlying business invariant.
+
+### Authoritative State and Migration
+
+PostgreSQL is authoritative for an entity once that entity's durable repository migration is adopted.
+
+The platform must not establish indefinite dual-write authority between in-memory and durable stores. During incremental migration, compatibility mechanisms may exist temporarily, but there must be a defined path to one authoritative persistence mechanism.
+
+Additional domain services should migrate incrementally behind repositories without creating a second domain architecture.
+
+### Persistence Error Semantics
+
+Persistence failures must be translated into application-level outcomes appropriate to the operation, including not found, conflict, concurrency conflict, invalid related entity, authorization/RLS failure, retryable transient failure, and infrastructure failure.
+
+Retries are limited to genuinely transient failures such as appropriate serialization, deadlock, or connection failures. Business conflicts and validation failures must not be blindly retried.
+
+### Architecture-Change Triggers
+
+This contract should be revisited only when implementation evidence demonstrates a material architectural problem, including:
+
+- PostgreSQL cannot enforce a required invariant;
+- the required business mutation cannot be made atomic;
+- the repository boundary causes unavoidable domain leakage;
+- tenant isolation cannot be reliably enforced;
+- the concurrency model cannot protect a required invariant;
+- the required MVP workflow cannot be represented by the contract; or
+- demonstrated production-scale workload invalidates the design assumptions.
+
+Implementation details such as exact SQL statements, filenames, dependency-injection wiring, worker technology, connection-pool tuning, and individual route implementations remain implementation concerns and do not constitute new architectural decisions by themselves.

@@ -87,6 +87,11 @@ test("durable Resource / Qualification / Availability persistence is tenant-safe
     geographicRestrictions: { zones: ["zone-a"] }, serviceRestrictions: { blocked: ["service-x"] },
     metadata: { externalKey: "r1" }
   });
+  await assert.rejects(
+    () => resourceService.create({ principal: principalA, id: "resource-1", name: "Duplicate Resource" }),
+    /duplicate|already exists/i
+  );
+
   const resourceB = await resourceService.create({ principal: principalB, id: "resource-1", name: "Other Tenant Resource" });
   const resourceBOnly = await resourceService.create({ principal: principalB, id: "resource-b", name: "Other Tenant Resource B" });
   assert.equal(resourceA.id, resourceB.id);
@@ -140,6 +145,14 @@ test("durable Resource / Qualification / Availability persistence is tenant-safe
   assert.equal(resourceQualification.expirationAt.toISOString(), "2027-01-01T00:00:00.000Z");
   assert.deepEqual(resourceQualification.restrictions, { geography: "zone-a" });
 
+  await assert.rejects(
+    () => resourceQualificationService.create({
+      principal: principalA, resourceQualificationId: "rq-1", resourceId: "resource-1",
+      qualificationId: "qualification-1", serviceRef: "service-opaque-1"
+    }),
+    /duplicate|already exists/i
+  );
+
   const updatedResourceQualification = await resourceQualificationService.update({
     principal: principalA, resourceQualificationId: "rq-1", resourceId: "resource-1",
     qualificationId: "qualification-1", serviceRef: "service-opaque-1", statusCode: "active",
@@ -183,6 +196,14 @@ test("durable Resource / Qualification / Availability persistence is tenant-safe
     zoneId: "zone-a", available: true
   });
   assert.equal(availability.zoneId, "zone-a");
+
+  await assert.rejects(
+    () => availabilityService.create({
+      principal: principalA, id: "availability-1", resourceId: "resource-1",
+      startTime: "2026-10-06T09:00:00Z", endTime: "2026-10-06T10:00:00Z"
+    }),
+    /duplicate|already exists/i
+  );
 
   const updatedAvailability = await availabilityService.update({
     principal: principalA, id: "availability-1", resourceId: "resource-1",

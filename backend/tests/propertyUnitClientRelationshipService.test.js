@@ -3,14 +3,12 @@ const {ClientPropertyRelationshipService}=require("../src/services/clientPropert
 const principal={userId:"user-1",organizationId:"org-1",permissions:["property:create","unit:create","clientPropertyRelationship:create","clientPropertyRelationship:update","clientPropertyRelationship:read"]};
 test("relationship service enforces property/unit linkage and authorization",async()=>{
  const clientRepository={get:async({clientId})=>clientId==="client-1"?{id:"client-1"}:null};
- const clientRepository={get:async({clientId})=>clientId==="client-1"?{id:"client-1"}:null};
  const propertyRepository={create:async({property})=>property,get:async({propertyId})=>propertyId==="property-1"?{id:"property-1"}:null};
  const unitRepository={create:async({unit})=>unit,get:async({unitId})=>unitId==="unit-1"?{id:"unit-1",propertyId:"property-1"}:null};
  const relationshipRepository={create:async({relationship})=>relationship,close:async({relationshipId,endAt})=>({relationshipId,endAt}),listByClient:async({clientId})=>[{clientId}],listByProperty:async({propertyId})=>[{propertyId}]};
  const transaction=async(_p,_a,work)=>work({});
  const service=new ClientPropertyRelationshipService({clientRepository,propertyRepository,unitRepository,relationshipRepository,transaction});
  assert.equal((await service.createRelationship({principal,id:"rel-1",clientId:"client-1",propertyId:"property-1",unitId:"unit-1",relationshipType:"resident",startAt:"2026-01-01T00:00:00Z"})).id,"rel-1");
- await assert.rejects(service.createRelationship({principal,id:"rel-missing-client",clientId:"missing-client",propertyId:"property-1",relationshipType:"resident",startAt:"2026-01-01T00:00:00Z"}),/Client not found/);
  await assert.rejects(service.createRelationship({principal,id:"rel-missing-client",clientId:"missing-client",propertyId:"property-1",relationshipType:"resident",startAt:"2026-01-01T00:00:00Z"}),/Client not found/);
  await assert.rejects(service.createRelationship({principal,id:"rel-2",clientId:"client-1",propertyId:"property-1",unitId:"unit-2",relationshipType:"resident",startAt:"2026-01-01T00:00:00Z"}),/Unit not found/);
  await assert.rejects(service.createRelationship({principal,id:"rel-3",clientId:"client-1",propertyId:"missing",relationshipType:"resident",startAt:"2026-01-01T00:00:00Z"}),/Property not found/);

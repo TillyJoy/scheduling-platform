@@ -1,5 +1,5 @@
 const http = require("http");
-const { createAppState, createHandler } = require("./app");
+const { createAppState, createHandler, ensureDurableDemoData } = require("./app");
 const { AuthenticationService } = require("./services/authenticationService");
 const { createDatabasePool, runMigrations } = require("./database");
 
@@ -13,6 +13,7 @@ async function start() {
   const databasePool = process.env.DATABASE_URL ? createDatabasePool() : null;
   if (databasePool) await runMigrations(databasePool);
   const state = createAppState({ authenticationService, databasePool });
+  await ensureDurableDemoData(state);
   const server = http.createServer(createHandler(state, { allowDevelopmentBypass }));
 
   server.listen(PORT, () => {

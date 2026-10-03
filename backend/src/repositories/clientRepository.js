@@ -41,7 +41,7 @@ class ClientRepository {
 
   async get({ principal, clientId, db = this.pool }) {
     this.#requirePrincipal(principal);
-    const result = await this.pool.query(
+    const result = await db.query(
       `SELECT id, organization_id, first_name, last_name, phone, email, status, created_at, updated_at
        FROM clients
        WHERE organization_id = $1 AND id = $2`,

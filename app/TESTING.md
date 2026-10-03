@@ -93,35 +93,30 @@ Test on:
 - Widget actions
 - Driving mode
 
-## Cross-Platform Browser MVP Verification
+## Cross-Platform MVP Client Verification
 
-The MVP is a single responsive browser-based application intended to support Chromebook, Windows PC, macOS, Android phone/tablet, iPhone, and iPad. Verification must evaluate the same deployed web application rather than separate platform-specific applications.
+The MVP has two client surfaces sharing the same backend/API and authoritative data model: one responsive web application for Chromebook, Windows PC, and macOS, plus functional native/mobile applications for Android phone/tablet, iPhone, and iPad.
 
 ### Acceptance criteria
 
-"Browser MVP verified" requires:
+"Cross-platform MVP verified" requires:
 
-1. The deployed application is reachable through a normal supported browser.
-2. Production authentication works.
-3. The core MVP workflow works.
-4. The application is responsive on desktop and mobile/tablet form factors.
-5. The practical workflow has been interactively verified on representative supported platforms:
-   - Chromebook
-   - Windows PC
-   - macOS
-   - Android
-   - iPhone
-   - iPad
-6. No platform-specific blocker prevents normal MVP use.
-7. Interactive browser verification is distinguished from HTTP/API smoke testing.
+1. The deployed web application is reachable through a normal supported browser on Chromebook, Windows PC, and macOS.
+2. Production authentication works for the applicable client surfaces.
+3. The core MVP workflow works through the applicable client surface.
+4. The web application is responsive and usable on desktop form factors.
+5. Functional native/mobile clients exist and are usable on Android phone/tablet, iPhone, and iPad.
+6. The practical MVP workflow has been interactively verified on each required platform/client surface.
+7. Native/mobile clients use the shared backend/API and authoritative data model rather than separate business-rule implementations.
+8. No platform-specific blocker prevents normal MVP use.
+9. Interactive client verification is distinguished from HTTP/API smoke testing.
 
-The eventual interactive workflow should cover, as applicable:
+The eventual verification scope should cover, as applicable:
 
-**Open deployed application → authenticate → reach application → load organization/user context → access jobs/work orders → access resources/scheduling data → select date/time → view availability → create appointment → view resulting appointment → navigate the application → verify responsive layout and interaction.**
+- **Chromebook / Windows PC / macOS:** open deployed web application → authenticate → reach application → load organization/user context → access jobs/work orders → access resources/scheduling data → select date/time → view availability → create appointment → view resulting appointment → navigate the application → verify responsive layout and interaction.
+- **Android / iPhone / iPad:** launch native/mobile application → authenticate → reach application → load organization/user context → access jobs/work orders → access resources/scheduling data → select date/time → view availability → create appointment → view resulting appointment → navigate the application → verify touch interaction and applicable mobile behavior.
 
-Touch interaction must be included on touch platforms where applicable.
-
-No platform may be marked VERIFIED without actual interactive verification evidence for that platform. This testing requirement does not establish that any platform is currently verified. Production deployment, authentication implementation, feature completeness, and interactive browser verification remain separate status dimensions.
+No platform may be marked VERIFIED without actual interactive evidence for that platform. This testing requirement does not establish that any platform is currently verified. Production deployment, authentication implementation, native/mobile client implementation, feature completeness, and platform verification remain separate status dimensions.
 
 ## Client Portal Testing
 

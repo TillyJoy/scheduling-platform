@@ -1,17 +1,41 @@
 const { Assignment } = require("../models/assignment");
+const { lockResources } = require("../database/schedulingConflictLock");
 
 class AssignmentService {
   constructor({
     assignmentStore = new Map(),
+    assignmentRepository = null,
+    resourceRepository = null,
+    jobRepository = null,
+    workOrderRepository = null,
+    transaction = null,
     authorize = AssignmentService.defaultAuthorize,
     statusResolver = null
   } = {}) {
+    if (assignmentRepository && !transaction) throw new Error("transaction is required with assignmentRepository");
     this.assignmentStore = assignmentStore;
+    this.assignmentRepository = assignmentRepository;
+    this.resourceRepository = resourceRepository;
+    this.jobRepository = jobRepository;
+    this.workOrderRepository = workOrderRepository;
+    this.transaction = transaction;
     this.authorize = authorize;
     this.statusResolver = statusResolver;
   }
 
-  create({ principal, ...input }) {
+  create(args = {}) {
+    return this.assignmentRepository ? this.#durableCreate(args) : this.#memoryCreate(args);
+  }
+
+  get(args = {}) {
+    return this.assignmentRepository ? this.#durableGet(args) : this.#memoryGet(args);
+  }
+
+  list(args = {}) {
+    return this.assignmentRepository ? this.#durableList(args) : this.#memoryList(args);
+  }
+
+  #memoryCreate({ principal, ...input }) {
     this.#requirePrincipal(principal);
     const assignment = new Assignment(input);
     this.#authorize(principal, "assignment:create", assignment.organizationId);
@@ -22,7 +46,7 @@ class AssignmentService {
     return this.#clone(assignment);
   }
 
-  get({ principal, assignmentId }) {
+  #memoryGet({ principal, assignmentId }) {
     this.#requirePrincipal(principal);
     const assignment = this.assignmentStore.get(this.#key(principal.organizationId, assignmentId));
     if (!assignment) throw new Error("Assignment not found");
@@ -30,7 +54,7 @@ class AssignmentService {
     return this.#clone(assignment);
   }
 
-  list({ principal, resourceId = null, startTime = null, endTime = null } = {}) {
+  #memoryList({ principal, resourceId = null, startTime = null, endTime = null } = {}) {
     this.#requirePrincipal(principal);
     this.#authorize(principal, "assignment:read", principal.organizationId);
     const start = startTime ? new Date(startTime) : null;
@@ -42,6 +66,79 @@ class AssignmentService {
       .filter(a => !end || a.startTime < end)
       .sort((a, b) => a.startTime - b.startTime)
       .map(assignment => this.#clone(assignment));
+  }
+
+  async #durableCreate({ principal, ...input }) {
+    this.#requirePrincipal(principal);
+    this.#authorize(principal, "assignment:create", principal.organizationId);
+    return this.transaction(principal, "assignment.create", async db => {
+      const assignment = new Assignment({ ...input, organizationId: principal.organizationId });
+      await lockResources(db, principal.organizationId, [assignment.resourceId]);
+
+      if (await this.assignmentRepository.get({ principal, assignmentId: assignment.id, db })) {
+        throw new Error("Assignment ID already exists");
+      }
+
+      const resource = await this.resourceRepository.get({
+        principal,
+        resourceId: assignment.resourceId,
+        db
+      });
+      if (!resource) throw new Error("Resource not found");
+
+      if (assignment.jobId) {
+        const job = await this.jobRepository.get({ principal, jobId: assignment.jobId, db });
+        if (!job) throw new Error("Job not found");
+      }
+
+      if (assignment.workOrderId) {
+        const workOrder = await this.workOrderRepository.get({
+          principal,
+          workOrderId: assignment.workOrderId,
+          db
+        });
+        if (!workOrder) throw new Error("Work order not found");
+      }
+
+      const conflicts = await this.assignmentRepository.findConflicts({
+        principal,
+        resourceId: assignment.resourceId,
+        startTime: assignment.startTime,
+        endTime: assignment.endTime,
+        db
+      });
+      if (conflicts.some(existing => this.#consumesResource(existing))) {
+        throw new Error("Resource is already assigned to an overlapping assignment");
+      }
+
+      return this.assignmentRepository.create({
+        principal,
+        assignment,
+        db
+      });
+    });
+  }
+
+  async #durableGet({ principal, assignmentId }) {
+    this.#requirePrincipal(principal);
+    this.#authorize(principal, "assignment:read", principal.organizationId);
+    const assignment = await this.transaction(
+      principal,
+      "assignment.read",
+      db => this.assignmentRepository.get({ principal, assignmentId, db })
+    );
+    if (!assignment) throw new Error("Assignment not found");
+    return assignment;
+  }
+
+  async #durableList({ principal, resourceId = null, startTime = null, endTime = null }) {
+    this.#requirePrincipal(principal);
+    this.#authorize(principal, "assignment:read", principal.organizationId);
+    return this.transaction(
+      principal,
+      "assignment.list",
+      db => this.assignmentRepository.list({ principal, resourceId, startTime, endTime, db })
+    );
   }
 
   #assertResourceAvailable(candidate) {

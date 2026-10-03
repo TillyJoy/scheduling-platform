@@ -126,22 +126,19 @@ if (!process.env.DATABASE_URL || process.env.RUN_POSTGRES_TESTS !== "1") {
     const otherOrder = await workOrderService.create({
       principal: principalB,
       id: "wo-1",
-      jobId: "job-1"
+      jobId: "job-1-from-b"
     });
     assert.equal(otherOrder.number, "WO-1");
 
-    let crossTenantError = null;
-    try {
-      await workOrderService.create({
+    await assert.rejects(
+      () => workOrderService.create({
         principal: principalA,
         id: "wo-cross",
         jobId: "job-1-from-b",
         number: "WO-CROSS"
-      });
-    } catch (error) {
-      crossTenantError = error;
-    }
-    assert.match(crossTenantError?.message ?? "", /Job not found/);
+      }),
+      /Job not found/
+    );
 
     const concurrent = await Promise.all([
       workOrderService.create({ principal: principalA, id: "wo-2", jobId: "job-1" }),

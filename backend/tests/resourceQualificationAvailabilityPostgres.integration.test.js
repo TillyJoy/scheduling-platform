@@ -57,7 +57,6 @@ test("durable Resource / Qualification / Availability persistence is tenant-safe
         await db.query("DELETE FROM resource_qualifications WHERE organization_id=$1", [organizationId]);
         await db.query("DELETE FROM qualifications WHERE organization_id=$1", [organizationId]);
         await db.query("DELETE FROM resources WHERE organization_id=$1", [organizationId]);
-        await db.query("DELETE FROM audit_events WHERE organization_id=$1", [organizationId]);
       }).catch(() => {});
     }
     try {

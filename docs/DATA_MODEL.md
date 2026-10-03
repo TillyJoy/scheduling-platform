@@ -1767,3 +1767,64 @@ This interpretation preserves Resource ≠ User, Service Definition ≠ Actual W
 ## Decision status
 
 Architectural decision — authoritative. The durable Qualification model is a standalone organization-owned Qualification definition plus an organization-scoped Resource Qualification relationship with optional service scope. This decision is limited to the Resource / Qualification data model and does not add Service persistence or alter the approved durable-persistence sequence.
+
+---
+
+# Authoritative Qualification Data-Model Interpretation
+
+The generalized Resource architecture establishes that qualifications belong to the Resource capability/profile model, while the existing Auditor Service Qualification establishes the required service-specific semantics. These are reconciled as follows.
+
+## Qualification definition
+
+A Qualification is an organization-owned, reusable definition of a qualification. It is domain-neutral and may represent a certification, credential, training/capability qualification, or other organization-defined qualification concept.
+
+A Qualification definition is distinct from the fact that a Resource holds that qualification.
+
+## Resource Qualification
+
+A Resource Qualification is the organization-scoped relationship between a Resource and a Qualification definition. It is the authoritative durable record of a Resource's qualification state.
+
+The relationship carries:
+
+- Resource identity
+- Qualification identity
+- optional service scope
+- qualification status
+- effective date/time
+- expiration date/time
+- restrictions
+- verification state/metadata
+- documentation/evidence references
+- created/updated dates
+
+The durable identity is (organization_id, resource_qualification_id). The relationship must use tenant-safe composite foreign keys to Resource and Qualification.
+
+Multiple records are allowed when historical or service-scoped states must be preserved.
+
+A Resource Qualification is not Auditor-specific. Auditor and Contractor qualifications are specialized uses of the same generalized Resource model.
+
+## Auditor Service Qualification reconciliation
+
+The existing Auditor Service Qualification fields are preserved by treating them as a Resource Qualification with service scope:
+
+Resource → Qualification → optional Service scope → status/effective/expiration/restrictions
+
+No separate Auditor qualification table is required by the architecture. The Auditor remains a specialized Resource profile.
+
+## Service persistence dependency
+
+The current durable migration sequence does not establish Service as the next persistence prerequisite. Therefore, the current Resource Qualification model must not create a durable Service table solely to support this relationship.
+
+Until Service persistence is implemented, service scope is represented by an organization-scoped opaque service reference. A null reference means service-independent; a non-null reference means the qualification applies to that service reference.
+
+Once Service becomes durably persisted, that reference can be replaced or normalized into a tenant-safe Service relationship without changing the generalized Resource Qualification model.
+
+## Scheduling semantics
+
+The Scheduling Engine evaluates Resource Qualifications when determining whether a Resource can satisfy a service requirement. Qualification validity depends on the applicable status, effective/expiration window, service scope, and restrictions. Availability remains a separate model and is evaluated independently.
+
+This interpretation preserves Resource ≠ User, Service Definition ≠ Actual Work, generalized Resource extensibility beyond auditors, and the documented service-specific Auditor/Contractor qualification behavior.
+
+## Decision status
+
+Architectural decision — authoritative. The durable Qualification model is a standalone organization-owned Qualification definition plus an organization-scoped Resource Qualification relationship with optional service scope. This decision is limited to the Resource / Qualification data model and does not add Service persistence or alter the approved durable-persistence sequence.

@@ -19,6 +19,16 @@ test("durable Assignment persistence is tenant-safe, auditable, transactional, a
   const roleName = `assignment_app_test_${suffix.replace(/[^a-zA-Z0-9_]/g, "_")}`;
   const permissions = ["assignment:create", "assignment:read"];
 
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    const result = await pool.query(
+      "SELECT 1 FROM schema_migrations WHERE version = '007' LIMIT 1"
+    ).catch(() => ({ rowCount: 0 }));
+    if (result.rowCount) break;
+    if (attempt === 119) {
+      throw new Error("Base durable migrations were not ready before Assignment migration setup");
+    }
+    await new Promise(resolve => setTimeout(resolve, 250));
+  }
   await runMigrations(pool);
 
   const principalA = { userId: `user-a-${suffix}`, organizationId: orgA, permissions };

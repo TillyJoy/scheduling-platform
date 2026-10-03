@@ -59,6 +59,14 @@ jobs:
           RUN_POSTGRES_TESTS: 1
         run: node --test tests/fieldVisitService.test.js tests/fieldExecutionSyncService.test.js tests/fieldExecutionSyncApi.test.js tests/fieldExecutionPostgres.integration.test.js
 
+      - name: Run focused property relationship tests
+        working-directory: backend
+        env:
+          DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/scheduling_platform_test
+          DATABASE_SSL: "false"
+          RUN_POSTGRES_TESTS: 1
+        run: node --test tests/propertyUnitClientRelationshipRepository.test.js tests/propertyUnitClientRelationshipService.test.js tests/propertyUnitClientRelationship.integration.test.js
+
       - name: Build frontend
         working-directory: frontend
         run: npm run build

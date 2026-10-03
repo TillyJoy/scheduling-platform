@@ -693,3 +693,82 @@ This contract should be revisited only when implementation evidence demonstrates
 - demonstrated production-scale workload invalidates the design assumptions.
 
 Implementation details such as exact SQL statements, filenames, dependency-injection wiring, worker technology, connection-pool tuning, and individual route implementations remain implementation concerns and do not constitute new architectural decisions by themselves.
+
+
+## Workflow Architecture
+
+Workflows are configurable organization-owned lifecycle/process definitions. A workflow is distinct from the status model: statuses represent states within a lifecycle, while a workflow defines the configured process and behavior governing progression through that lifecycle. Attaching a workflow to an entity does not make the workflow itself a status or state.
+
+### Workflow Definition and Versioning
+
+Workflow definitions are:
+
+- organization-owned;
+- versioned;
+- permission-controlled; and
+- configuration data rather than hard-coded application behavior.
+
+A workflow instance retains the workflow version under which it was created. Later changes to the organization’s workflow definition must not silently change the historical meaning or execution rules of an existing workflow instance.
+
+### Workflow Transitions
+
+A workflow transition is more than an allowed source/target status pair. A configured transition may require:
+
+- applicable permissions;
+- configured conditions;
+- required fields;
+- required documents; and/or
+- approvals.
+
+All configured requirements must be evaluated server-side before the transition is accepted.
+
+### Atomic Workflow Execution
+
+A successful workflow transition is one coherent application operation. Authorization and configured requirements are validated before mutation; the resulting state change is persisted atomically; the standardized domain event is emitted; and immutable transition history/audit is recorded as part of the same core transactional operation.
+
+The workflow transition, required audit/history, and resulting domain-event/outbox persistence follow the Durable Persistence Architecture Contract. A required failure before commit prevents a partial core transition.
+
+### Workflow Concurrency
+
+Competing workflow transitions must be protected against conflicting concurrent updates. The platform must not use silent last-write-wins behavior where that could lose a valid transition or violate a workflow invariant.
+
+Appropriate optimistic concurrency/version preconditions and, where required, database-enforced conflict protection must be used consistently with the Durable Persistence Architecture Contract.
+
+### Workflow Idempotency and Downstream Processing
+
+Workflow-triggered actions and events must be idempotent wherever retry or replay is possible. Idempotency belongs at the operation/event/consumer boundary appropriate to the specific workflow action and must preserve organization scope and business invariants.
+
+Once a core workflow transition commits successfully, downstream notification, integration, or automation failure must not ordinarily roll back that committed lifecycle transition. Domain events, the durable outbox, retry processing, and reconciliation handle downstream work after the core transaction commits.
+
+### Automation Identity
+
+Automated workflow actions must execute under an explicit, auditable service/automation identity. They must not appear as an unattributed human-user action.
+
+Audit records and domain-event metadata must distinguish the trusted initiating actor, automated identity, and source where applicable, while preserving tenant isolation and backend authorization.
+
+### Configuration-Level Testing
+
+Configured workflows must be testable and validated through configuration-level mechanisms without requiring application-code changes. Workflow configuration validation should be capable of identifying invalid transitions, unmet structural requirements, and other configuration errors before the configuration is used for operational execution.
+
+### Relationship to Status Configuration
+
+The existing Configurable Status Framework remains the reusable mechanism for organization-scoped statuses, transitions, terminal behavior, server-side transition validation, permissions, and immutable transition audit.
+
+The Workflow Architecture does not replace that framework or create a second status system. Workflows govern configured process behavior around status/state progression and may impose additional requirements on transitions.
+
+### Architectural Boundaries
+
+Workflow behavior remains within the existing application/domain architecture. It does not create a new application layer.
+
+The following existing boundaries remain authoritative:
+
+- organization-scoped configuration;
+- trusted-principal authorization;
+- backend/server-side validation;
+- immutable audit/history;
+- domain events;
+- durable event/outbox processing;
+- tenant isolation; and
+- the Durable Persistence Architecture Contract.
+
+These workflow decisions are architectural contracts. Exact database schemas, API route shapes, UI components, worker technology, and other implementation details remain implementation concerns unless they materially change one of these contracts.

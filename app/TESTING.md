@@ -93,6 +93,31 @@ Test on:
 - Widget actions
 - Driving mode
 
+## Cross-Platform MVP Client Verification
+
+The MVP has two client surfaces sharing the same backend/API and authoritative data model: one responsive web application for Chromebook, Windows PC, and macOS, plus functional native/mobile applications for Android phone/tablet, iPhone, and iPad.
+
+### Acceptance criteria
+
+"Cross-platform MVP verified" requires:
+
+1. The deployed web application is reachable through a normal supported browser on Chromebook, Windows PC, and macOS.
+2. Production authentication works for the applicable client surfaces.
+3. The core MVP workflow works through the applicable client surface.
+4. The web application is responsive and usable on desktop form factors.
+5. Functional native/mobile clients exist and are usable on Android phone/tablet, iPhone, and iPad.
+6. The practical MVP workflow has been interactively verified on each required platform/client surface.
+7. Native/mobile clients use the shared backend/API and authoritative data model rather than separate business-rule implementations.
+8. No platform-specific blocker prevents normal MVP use.
+9. Interactive client verification is distinguished from HTTP/API smoke testing.
+
+The eventual verification scope should cover, as applicable:
+
+- **Chromebook / Windows PC / macOS:** open deployed web application → authenticate → reach application → load organization/user context → access jobs/work orders → access resources/scheduling data → select date/time → view availability → create appointment → view resulting appointment → navigate the application → verify responsive layout and interaction.
+- **Android / iPhone / iPad:** launch native/mobile application → authenticate → reach application → load organization/user context → access jobs/work orders → access resources/scheduling data → select date/time → view availability → create appointment → view resulting appointment → navigate the application → verify touch interaction and applicable mobile behavior.
+
+No platform may be marked VERIFIED without actual interactive evidence for that platform. This testing requirement does not establish that any platform is currently verified. Production deployment, authentication implementation, native/mobile client implementation, feature completeness, and platform verification remain separate status dimensions.
+
 ## Client Portal Testing
 
 Test:

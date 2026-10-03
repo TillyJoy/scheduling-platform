@@ -30,13 +30,22 @@ The frontend should communicate with the backend through the API.
 
 The frontend must not directly access the production database.
 
-The system should support responsive web interfaces for:
+The MVP requires platform-appropriate client applications sharing one platform backend and authoritative data model. The desktop/browser client is one responsive web application for Chromebook, Windows PC, and macOS. The mobile/tablet client is a functional native/mobile application for Android phone/tablet, iPhone, and iPad.
 
-- Desktop
-- Tablet
-- Mobile
+The client split is:
 
-Future native mobile applications may use the same API.
+| Platform | MVP client requirement |
+| --- | --- |
+| Chromebook | Responsive web application |
+| Windows PC | Responsive web application |
+| macOS | Responsive web application |
+| Android phone/tablet | Functional native/mobile application |
+| iPhone | Functional native/mobile application |
+| iPad | Functional native/tablet application |
+
+The web and native/mobile clients use the same backend/API and authoritative data model. Core business rules, tenant isolation, authorization, scheduling logic, persistence, auditability, and integration behavior remain platform-neutral and must not be duplicated as independent client-side domain implementations.
+
+This is an MVP platform requirement, not evidence that any platform has been interactively verified. Production deployment, client implementation, feature completeness, and platform verification remain separate status items. Native/mobile applications are now an explicit MVP requirement for Android, iPhone, and iPad.
 
 ## Backend API
 

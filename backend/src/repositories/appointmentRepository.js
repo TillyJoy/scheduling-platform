@@ -21,7 +21,7 @@ class AppointmentRepository {
       [record.id, principal.organizationId, record.departmentId, record.clientId, record.propertyId,
        record.workOrderId, record.teamId, record.zoneId, record.startTime, record.endTime, record.status,
        record.schedulerId, record.clientSchedulingIndicator, record.internalNotes,
-       record.cancellationReason, record.rescheduleReason, now]
+       record.cancellationReason, record.rescheduleReason, now, now]
     );
     const saved = this.#map(result.rows[0]);
     await this.#replaceChildren({ principal, appointment: saved, db });

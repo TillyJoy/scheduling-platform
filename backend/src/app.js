@@ -26,6 +26,7 @@ const { ResourceService } = require("./services/resourceService");
 const { QualificationService } = require("./services/qualificationService");
 const { ResourceQualificationService } = require("./services/resourceQualificationService");
 const { AvailabilityService } = require("./services/availabilityService");
+const { StatusConfigurationService } = require("./services/statusConfigurationService");
 const { withTransaction } = require("./database");
 
 const MAX_BODY_BYTES = 1024 * 1024;
@@ -72,6 +73,10 @@ function createAppState(seed = {}) {
   const workOrderStore = new Map(workOrders.map(order => [JSON.stringify([order.organizationId, order.id]), order]));
   const domainEventService = new DomainEventService({ eventStore: domainEvents, auditStore: auditEvents });
   const databasePool = seed.databasePool || null;
+  const statusConfigurationService = seed.statusConfigurationService || new StatusConfigurationService({
+    statusStore: seed.statusStore || new Map(),
+    auditStore: auditEvents
+  });
   const transaction = databasePool
     ? (principal, action, work) => withTransaction(databasePool, { organizationId: principal.organizationId, userId: principal.userId, action }, work)
     : null;
@@ -133,11 +138,19 @@ function createAppState(seed = {}) {
     return result;
   };
 
+  const appointmentStatusResolver = ({ organizationId, entityType, statusCode }) => {
+    if (!organizationId || !entityType || !statusCode) return null;
+    return statusConfigurationService.statusStore.get(
+      [organizationId, entityType, statusCode].join(":")
+    ) || null;
+  };
+
   const appointmentService = new AppointmentService({
     appointmentStore,
     holdStore: new Map(),
     schedulingHolds: holds,
     schedulingService,
+    statusResolver: appointmentStatusResolver,
     appointmentRepository,
     schedulingHoldRepository,
     transaction
@@ -195,6 +208,8 @@ function createAppState(seed = {}) {
     domainEventService,
     demoAvailability,
     schedulingService,
+    statusConfigurationService,
+    appointmentStatusResolver,
     appointmentService,
     authenticationService: seed.authenticationService || null,
     databasePool

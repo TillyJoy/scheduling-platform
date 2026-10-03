@@ -46,7 +46,13 @@ It should handle:
 
 - Authentication
 - Authorization
-- Client records
+- Intake records
+- Applications
+- Vetting/review records
+- Eligibility Determinations
+- Evidence/document records
+- Service Restrictions
+- Client/person records
 - Properties
 - Units
 - Services
@@ -60,6 +66,32 @@ It should handle:
 - Reporting
 
 The API requirements are defined in `API.md`.
+
+
+## Intake, Application, Vetting, Eligibility & Service Restrictions
+
+The platform's pre-operational workflow is modeled as:
+
+**Intake → Application → Vetting → Eligibility Determination → configurable outcome → potentially Job**
+
+These are domain concepts within the existing backend/API, database, configuration, audit, and integration architecture; they are not a separate application layer.
+
+The architecture must preserve:
+
+- Intake as receipt/routing of information or requests.
+- Application as a first-class submission record.
+- **Application ≠ Job.**
+- Vetting as configurable review and verification.
+- **Eligibility Determination ≠ Eligibility Boolean.**
+- Evidence as traceable support for reviews and determinations.
+- Historical/immutable determination records.
+- Service Restrictions as configurable limitations/warnings distinct from eligibility.
+- Configurable Application → Job transition rules.
+
+Organizations may configure intake sources, forms, conditional questions, signatures, documents, application statuses/transitions, vetting steps, eligibility rules/outcomes, restriction detection/approval/notification/escalation, and Application → Job mappings without changing the core platform.
+
+The architecture remains industry-neutral. Organization-specific rules and terminology belong in configuration.
+
 
 ## Scheduling Engine
 
@@ -145,6 +177,9 @@ The database should contain:
 - Organizations
 - Departments
 - Users
+- Intake/Application records
+- Vetting and Eligibility Determinations
+- Evidence and Service Restrictions
 - Clients
 - Properties
 - Units

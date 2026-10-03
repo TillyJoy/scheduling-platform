@@ -12,7 +12,7 @@ Monday.com may provide eligibility and service information, but the scheduling e
 
 # 1. Scheduling Entry Requirements
 
-A client/property must not enter the active scheduling queue until the organization has determined that the client/property is ready for scheduling.
+A client/property must not enter the active scheduling queue until the organization has determined that the relevant Application/workflow is ready for scheduling. That determination may depend on configurable Application status, Eligibility Determinations, required evidence/documents, approvals, Service Restrictions, funding state, and other organization rules.
 
 For organizations using Monday.com, this may occur when the appropriate external status and connection rules indicate that scheduling may begin.
 
@@ -62,18 +62,18 @@ The Scheduler interface must display only services that are currently eligible a
 
 Service availability may depend on:
 
-- Client eligibility
-- Unit eligibility
-- Property eligibility
+- Applicable Eligibility Determinations and their configured outcomes
+- Unit eligibility determinations
+- Property eligibility determinations
 - Property service history
-- Prior work restrictions
+- Prior work restrictions and Service Restrictions
 - Funding availability
 - Service-specific rules
 - Geographic rules
 - Organization configuration
 - Funder requirements
 
-Eligibility must be evaluated dynamically.
+Eligibility and Service Restrictions must be evaluated dynamically from the applicable current determinations/rules while preserving historical determinations. A Boolean eligibility flag must not be treated as the authoritative eligibility model.
 
 ---
 

@@ -113,6 +113,167 @@ A person may have more than one role.
 
 ---
 
+
+# Architectural Section 4 — Intake, Application, Vetting, Eligibility & Service Restriction Model
+
+The following domain concepts are part of the authoritative architecture. They are documentation-only in this transfer and do not imply runtime implementation.
+
+## Intake
+
+An Intake records the receipt and routing of information, a request, referral, or potential service demand.
+
+Intake may originate from:
+
+- Public/online forms
+- Staff entry
+- Referrals
+- Phone/email
+- Portal
+- API
+- External system
+- Import
+- Other configured sources
+
+An Intake may create or update a Person, Organization/household, Property/Location, Application, or another configured record. Intake is distinct from Application.
+
+## Intake Form Definition and Submission
+
+A configurable Intake Form Definition describes fields, required and conditional questions, validation, signatures/attestations, required documents, evidence-linked responses, audience/permissions, version, retention, and audit behavior.
+
+A submitted form/response set must preserve the form version used for the submission.
+
+## Application
+
+An Application is a first-class request/submission record.
+
+An Application may reference:
+
+- Person or related people
+- Organization/household where applicable
+- Property/Location and units
+- Service/program requests
+- Intake/referral source
+- Required information and documents
+- Vetting tasks and reviews
+- Eligibility Determinations
+- Funding evaluations
+- Approvals
+- Jobs
+- Notes and history
+
+Application is not Job. An Application may produce zero, one, or multiple Jobs through configured transition rules.
+
+## Application Workflow and Status
+
+Application status is configurable.
+
+The model must be able to preserve status history and configured transition requirements, including required information/documents, reviewer/approver actions, permissions, notifications, tasks, automation, escalation, and visibility.
+
+## Vetting
+
+Vetting is a configurable collection of review and verification steps associated with an Application.
+
+Vetting may include information, document, identity, property/location, eligibility, funding, restriction/conflict, and external verification, plus manual review, missing-information tasks, reviewer assignment, escalation, and approval.
+
+## Eligibility Determination
+
+Eligibility must not be modeled as a Boolean.
+
+An Eligibility Determination records the structured decision and its context, including as applicable:
+
+- Person/Application scope
+- Property/Location/Unit scope
+- Service/program scope
+- Funding scope
+- Rule-set and rule version
+- Criteria evaluated
+- Evidence considered
+- Determination/outcome
+- Reviewer/actor
+- Determination date
+- Effective date
+- Expiration date
+- Reason/explanation
+- Missing information
+- Exception/override
+- Approval/review information
+- Re-certification requirements
+- Source
+
+Eligibility Determinations are auditable and historical. Later decisions or corrections must not destructively overwrite the prior determination.
+
+## Eligibility Rules and Outcomes
+
+Eligibility rules are configurable, versionable, and industry-neutral. They may be automated, manually reviewed, or hybrid.
+
+Eligibility outcomes are configurable and may include:
+
+- Eligible
+- Ineligible
+- Partially eligible
+- Conditionally eligible
+- Needs review
+- Pending documentation
+- Insufficient information
+- Expired
+- Exception approved
+- Other organization-defined outcomes
+
+## Evidence
+
+Evidence is supporting information linked to the relevant Application, vetting/review step, and/or Eligibility Determination.
+
+Evidence may be a document, form response, verified data, external verification result, staff-entered information, or another configured evidence type.
+
+Evidence must preserve sufficient source, verification, date, version, retention, and audit metadata to reconstruct the basis for a historical determination.
+
+## Eligibility History
+
+Eligibility history preserves prior determinations and the basis for those decisions.
+
+Historical determination records must be immutable or otherwise protected from destructive overwrite. Rule/configuration changes must not rewrite historical decisions.
+
+## Service Restriction
+
+A Service Restriction is a configurable limitation or warning distinct from Eligibility Determination.
+
+A restriction may apply to a Person, Application, Property/Location, Unit, Service, Program, Funding source, or other configured entity and may be effective only for a defined period.
+
+Restrictions may block, warn, require review, require approval, trigger notification/escalation, or otherwise affect workflow according to configuration.
+
+## Service Restriction Configuration and Alerts
+
+Restriction configuration must support:
+
+- Scope/entity type
+- Service/program/funding applicability
+- Geographic/property/unit conditions
+- Date and lookback conditions
+- Detection logic
+- Visibility and permissions
+- Approval requirements
+- Notification recipients/channels
+- Escalation paths
+- Documentation and notes
+- Resolution behavior
+- Audit requirements
+- Versioning where historical reconstruction requires it
+
+Restriction processing follows the configurable lifecycle:
+
+**Detection → Alert → Escalation/Approval where configured → Resolution → Audit**
+
+No hard-coded "unservable client" concept is required by this architecture.
+
+## Application-to-Job Transition
+
+Application-to-Job transition rules are configurable.
+
+A qualifying Application may produce zero, one, or multiple Jobs based on conditions such as status, Eligibility Determinations, approvals, required evidence/documents, service/program mappings, and other organization-defined rules.
+
+The transition must preserve auditability and must not collapse Application, Eligibility Determination, Job, Work Order, Appointment, or Field Visit into one record.
+
+
 # 5. Client
 
 A Client represents a person receiving or potentially receiving agency services.
@@ -382,11 +543,11 @@ Service combinations should not require creating a new service for every possibl
 
 ---
 
-# 13. Service Eligibility
+# 13. Eligibility Determination / Service Eligibility
 
-Eligibility must be represented as a dynamic relationship rather than a permanent field on the client.
+Eligibility must be represented through the structured Eligibility Determination architecture above rather than as a permanent Boolean field on the client.
 
-An eligibility record connects a client, property, unit, service, and potentially funding source.
+A current service-eligibility view may reference the applicable Eligibility Determination for a client/person, property, unit, service, program, and potentially funding source. The current scheduling state is a derived/current view; the historical determination remains authoritative for reconstructing prior decisions.
 
 ## Eligibility fields
 
@@ -395,10 +556,13 @@ An eligibility record connects a client, property, unit, service, and potentiall
 - Property ID
 - Unit ID where applicable
 - Service ID
-- Eligibility status
-- Eligibility reason
+- Eligibility Determination reference
+- Current outcome/status
+- Eligibility reason/explanation
+- Rule-set/version reference
 - Effective date
 - Expiration date
+- Reviewer/actor reference
 - Source system
 - Source record ID
 - Funding relationship

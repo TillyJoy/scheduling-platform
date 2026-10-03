@@ -1,5 +1,9 @@
 # User Roles
 
+Roles and permissions are configurable organizational constructs. The role names below are examples of operational roles, not a fixed platform taxonomy. Authorization is based on explicit permissions and the trusted authenticated principal.
+
+**Person ≠ User.** A User is an authenticated platform account and may be associated with a Person. Organization Membership establishes the User's organization access.
+
 The application must support configurable user roles and permissions.
 
 ## Scheduler
@@ -135,6 +139,8 @@ Clients may:
 Clients must only have access to their own scheduling information.
 
 ## Permission Principles
+
+Organization access must be established through Organization Membership. Caller-supplied organization identifiers must not establish authorization. The target record's organization must be validated server-side.
 
 Permissions should follow least-privilege principles.
 

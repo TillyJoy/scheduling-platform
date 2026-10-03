@@ -78,13 +78,21 @@ class WorkOrderService {
       });
       if (!job) throw new Error("Job not found");
 
-      const number = input.number ?? await this.numberGenerator({
-        organizationId,
-        jobId: input.jobId,
-        workOrderRepository: this.workOrderRepository,
-        db,
-        workOrderStore: this.workOrderStore
-      });
+      let number = input.number;
+      if (number === undefined || number === null) {
+        number = this.numberGenerator === WorkOrderService.defaultNumberGenerator
+          ? await this.workOrderRepository.nextAutomaticNumber({
+              principal: { userId: "system", organizationId },
+              db
+            })
+          : await this.numberGenerator({
+              organizationId,
+              jobId: input.jobId,
+              workOrderRepository: this.workOrderRepository,
+              db,
+              workOrderStore: this.workOrderStore
+            });
+      }
 
       try {
         return await this.workOrderRepository.create({
@@ -173,11 +181,7 @@ class WorkOrderService {
     return JSON.stringify([organizationId, id]);
   }
 
-  static async defaultNumberGenerator({ organizationId, workOrderRepository, db, workOrderStore }) {
-    if (workOrderRepository) {
-      const principal = { userId: "system", organizationId };
-      return workOrderRepository.nextAutomaticNumber({ principal, db });
-    }
+  static defaultNumberGenerator({ organizationId, workOrderStore }) {
     const prefix = "WO";
     const occupiedNumbers = new Set(
       [...workOrderStore.values()]

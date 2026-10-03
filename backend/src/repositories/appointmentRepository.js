@@ -13,13 +13,13 @@ class AppointmentRepository {
     const now = this.clock();
     const result = await db.query(
       `INSERT INTO appointments
-        (id, organization_id, department_id, client_id, property_id, work_order_id, zone_id,
+        (id, organization_id, department_id, client_id, property_id, work_order_id, team_id, zone_id,
          start_time, end_time, status_code, scheduler_id, client_scheduling_indicator,
          internal_notes, cancellation_reason, reschedule_reason, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$16)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$17)
        RETURNING *`,
       [record.id, principal.organizationId, record.departmentId, record.clientId, record.propertyId,
-       record.workOrderId, record.zoneId, record.startTime, record.endTime, record.status,
+       record.workOrderId, record.teamId, record.zoneId, record.startTime, record.endTime, record.status,
        record.schedulerId, record.clientSchedulingIndicator, record.internalNotes,
        record.cancellationReason, record.rescheduleReason, now]
     );
@@ -63,14 +63,14 @@ class AppointmentRepository {
     const now = this.clock();
     const result = await db.query(
       `UPDATE appointments
-       SET department_id=$3, client_id=$4, property_id=$5, work_order_id=$6, zone_id=$7,
+       SET department_id=$3, client_id=$4, property_id=$5, work_order_id=$6, team_id=$7, zone_id=$8,
            start_time=$8, end_time=$9, status_code=$10, scheduler_id=$11,
            client_scheduling_indicator=$12, internal_notes=$13, cancellation_reason=$14,
            reschedule_reason=$15, updated_at=$16
        WHERE organization_id=$1 AND id=$2
        RETURNING *`,
       [principal.organizationId, record.id, record.departmentId, record.clientId, record.propertyId,
-       record.workOrderId, record.zoneId, record.startTime, record.endTime, record.status,
+       record.workOrderId, record.teamId, record.zoneId, record.startTime, record.endTime, record.status,
        record.schedulerId, record.clientSchedulingIndicator, record.internalNotes,
        record.cancellationReason, record.rescheduleReason, now]
     );
@@ -176,6 +176,7 @@ class AppointmentRepository {
       clientId: row.client_id,
       propertyId: row.property_id,
       workOrderId: row.work_order_id,
+      teamId: row.team_id,
       departmentId: row.department_id,
       zoneId: row.zone_id,
       unitIds: children.unitIds,

@@ -87,6 +87,53 @@ The Scheduling Engine must not depend on Monday.com.
 
 Monday.com may provide information used by the engine, but the engine must also work for organizations without Monday.com.
 
+## Resources, Assignments, and Services
+
+Resources are generalized schedulable or operational capabilities. A **Resource is not a User**. A User represents authenticated access to the application; a Resource represents something that can be available, qualified, assigned, scheduled, or otherwise consumed by operational work.
+
+Resource types are organization-configurable and may include people, contractors, teams or crews, equipment, vehicles, rooms, facilities, or other organization-defined types. The core architecture must not require an Auditor or Contractor to be the underlying Resource abstraction.
+
+Resource configuration may include:
+
+- Resource type
+- Role or operational function
+- Capabilities
+- Qualifications
+- Qualification documentation and verification
+- Effective dates
+- Expiration dates
+- Status
+- Availability
+- Geographic restrictions
+- Service-specific restrictions
+- Organization-defined attributes
+
+A **Resource is not an Assignment**. An Assignment connects one or more Resources to operational work. Assignment behavior must support creation, modification, reassignment, removal, historical tracking, authorization, and audit.
+
+Teams are configurable groupings of Resources for operational purposes. Team membership is distinct from system-user membership. A Resource may belong to a Team without being a User, and a User may have system access without being a Resource.
+
+A **Service Definition is not Actual Work**. A Service Definition describes a type of work an organization offers or performs; it is not an occurrence of that work.
+
+A Service Definition may configure:
+
+- Duration
+- Required Resources or Resource types
+- Required qualifications and capabilities
+- Scheduling rules
+- Eligibility requirements
+- Geographic restrictions
+- Workflow requirements
+- Notification behavior
+- Billing behavior
+- Required documentation
+- Other organization-defined rules
+
+The conceptual operational relationship is:
+
+**Service Definition → Operational Work → Assignment → Scheduled Activity → Actual Work**
+
+These concepts remain distinct. Service Definitions, Resources, Assignments, scheduled activities, and Actual Work must not be collapsed into a single record or abstraction.
+
 ## Database
 
 The database stores the application's authoritative internal records.

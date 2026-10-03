@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS appointments (
   client_id TEXT NOT NULL,
   property_id TEXT NOT NULL,
   work_order_id TEXT,
+  team_id TEXT,
   zone_id TEXT,
   start_time TIMESTAMPTZ NOT NULL,
   end_time TIMESTAMPTZ NOT NULL,

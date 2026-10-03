@@ -851,3 +851,93 @@ Decision: Use a standalone organization-owned Qualification definition plus an o
 This decision does not introduce durable Service persistence, does not change the approved durable-persistence sequence, and does not authorize Appointment / Hold, Assignment, or unrelated runtime work. Availability remains a separate Resource-related persistence concern.
 
 The future Service persistence slice remains a dependency only for replacing the opaque service reference with a durable Service foreign-key relationship. It is not a prerequisite for implementing the current Resource / Qualification / Availability slice.
+
+## Authoritative Qualification Data Model
+
+The durable Resource / Qualification / Availability slice uses a generalized, reusable qualification model. The authoritative representation is a two-part model:
+
+1. Qualification definition — an organization-owned, reusable definition of a qualification. It is not an Auditor-only concept and is not itself proof that a Resource holds the qualification.
+2. Resource qualification — an organization-scoped relationship recording that a Resource holds or is authorized under a Qualification definition.
+
+This resolves the relationship between the generalized Resource capability/qualification architecture and the existing Auditor Service Qualification semantics without making Auditor or Contractor the core abstraction.
+
+### Qualification definition
+
+The durable Qualification definition is organization-owned and has tenant-scoped identity:
+
+- Primary identity: (organization_id, qualification_id)
+- Organization-defined code/key unique within the organization
+- Name
+- Description
+- Configurable status
+- Organization-defined configuration/metadata where required
+- Created date
+- Updated date
+
+Qualification definitions are reusable across Resources and are not limited to services. They may represent a certification, credential, capability qualification, training requirement, or another organization-defined qualification concept.
+
+### Resource qualification
+
+The durable Resource qualification relationship is organization-owned and has tenant-scoped identity:
+
+- Primary identity: (organization_id, resource_qualification_id)
+- (organization_id, resource_id) → Resource
+- (organization_id, qualification_id) → Qualification
+- Optional service_ref
+- Qualification status
+- Effective date/time
+- Expiration date/time
+- Restrictions
+- Verification status/metadata
+- Verification date/time where applicable
+- Verifier/actor reference where applicable
+- Documentation/evidence references where applicable
+- Created date
+- Updated date
+
+The Resource and Qualification foreign keys are tenant-safe composite foreign keys. A Resource from one organization must not be able to reference a Qualification from another organization.
+
+Multiple Resource Qualification records are permitted where historical or service-scoped qualification states must be preserved. The schema must not collapse historical changes into a single mutable row when doing so would destroy audit/history.
+
+### Service-specific qualification
+
+The existing Auditor Service Qualification is interpreted as a service-scoped Resource Qualification, not as a separate Auditor-only entity. Contractor qualifications use the same model.
+
+Because durable Service persistence is not yet part of the approved migration sequence, service_ref is an organization-scoped opaque service identifier in this slice rather than a foreign key to a Service table.
+
+- null service_ref = qualification is not limited to a specific service
+- non-null service_ref = qualification applies to that organization-defined service reference
+- separate Resource Qualification records may be used when the same Qualification has different status, dates, or restrictions by service
+
+The current in-memory scheduling model represents service qualifications as service identifiers in a Resource qualification collection. The durable model preserves that semantic while adding a reusable Qualification definition and the required lifecycle/verification metadata.
+
+This intentionally avoids introducing durable Service persistence as a prerequisite. When Service persistence is later implemented, service_ref may be converted or normalized to a tenant-safe Service foreign-key relationship without changing the Resource or Qualification concepts.
+
+### Scheduling-engine interpretation
+
+The Scheduling Engine must evaluate a Resource's Resource Qualification records against the requested service(s), qualification status, effective/expiration dates, and applicable restrictions. A Resource is qualified for a requested service only when an applicable Resource Qualification is active/valid for that service under organization configuration.
+
+Qualification status remains configurable rather than hard-coded to a single universal enum. Effective and expiration dates are properties of the Resource Qualification relationship, not the Resource record. Restrictions remain distinct qualification attributes and may be organization-defined.
+
+Qualification documentation/verification is evidence about the Resource Qualification; it does not turn the qualification into a User attribute or an Auditor-only record.
+
+### Tenant, RLS, and audit expectations
+
+Both Qualification definitions and Resource Qualification records are organization-owned records and must follow the existing durable-persistence contract:
+
+- non-null organization ownership
+- tenant-safe composite identities/foreign keys
+- forced PostgreSQL RLS
+- trusted transaction-local organization context established by the authenticated principal
+- repository-level organization predicates in addition to RLS
+- append-only audit events for material lifecycle changes
+- historical integrity for effective/expiration and status changes
+- no client-supplied organization identifier as an authorization mechanism
+
+### Architectural decision and scope
+
+Decision: Use a standalone organization-owned Qualification definition plus an organization-scoped Resource ↔ Qualification relationship, with optional service scoping on the relationship. This is the authoritative durable representation for the Resource / Qualification portion of the current persistence slice.
+
+This decision does not introduce durable Service persistence, does not change the approved durable-persistence sequence, and does not authorize Appointment / Hold, Assignment, or unrelated runtime work. Availability remains a separate Resource-related persistence concern.
+
+The future Service persistence slice remains a dependency only for replacing the opaque service reference with a durable Service foreign-key relationship. It is not a prerequisite for implementing the current Resource / Qualification / Availability slice.

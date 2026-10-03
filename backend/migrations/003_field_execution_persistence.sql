@@ -1,5 +1,5 @@
 CREATE TABLE IF NOT EXISTS field_visits (
-  id TEXT PRIMARY KEY,
+  id TEXT NOT NULL,
   organization_id TEXT NOT NULL REFERENCES organizations(id),
   appointment_id TEXT NOT NULL,
   work_order_id TEXT NOT NULL,
@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS field_visits (
   metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (organization_id, id)
+  PRIMARY KEY (organization_id, id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_field_visits_org_updated
@@ -40,7 +40,7 @@ CREATE POLICY field_visits_tenant_isolation ON field_visits
   WITH CHECK (organization_id = current_setting('app.organization_id', true));
 
 CREATE TABLE IF NOT EXISTS actual_work (
-  id TEXT PRIMARY KEY,
+  id TEXT NOT NULL,
   organization_id TEXT NOT NULL REFERENCES organizations(id),
   field_visit_id TEXT NOT NULL,
   work_order_id TEXT NOT NULL,

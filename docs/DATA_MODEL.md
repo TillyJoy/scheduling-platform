@@ -1592,3 +1592,123 @@ Organization
           ├── External Record Mappings
           ├── External Field Mappings
           └── Synchronization Events
+
+---
+
+# Future Contractor Compliance & Administration — Later Phase
+
+**Scope:** Future/later-phase capability. **Explicitly outside the initial MVP.** This section preserves the target domain model without creating an MVP implementation requirement.
+
+Contractor/external-resource compliance must remain distinct from the existing resource qualification model. The future model is:
+
+**Contractor/External Resource → Configurable Requirements → Evidence → Evaluation → Configurable Operational Rule → Assignment/Scheduling/Work Consequence**
+
+## Compliance Requirement
+
+A Compliance Requirement defines what an organization, service, or assignment requires.
+
+Requirements must be configurable and may apply at the appropriate organization, service, assignment, or contractor/resource scope.
+
+Examples include:
+
+- License or credential
+- Insurance requirement
+- Qualification/certification
+- Contract or agreement
+- Other organization-defined compliance requirement
+
+A requirement must not itself be treated as proof that the requirement is satisfied.
+
+## Compliance Evidence
+
+Compliance Evidence represents the credential, license, certification, insurance policy, contract/document, or other evidence offered to satisfy a requirement.
+
+Evidence may include:
+
+- Evidence type
+- Issuing authority/provider
+- Identifier or policy number where appropriate
+- Effective date
+- Expiration date
+- Renewal information
+- Supporting document reference
+- Verification information
+- Verification date
+- Verification source/status
+
+## Compliance Evaluation
+
+A Compliance Evaluation determines whether an applicable requirement is currently satisfied using the available evidence and applicable rules.
+
+Compliance must **not** be reduced to a single Boolean contractor status.
+
+The evaluation should preserve the requirement, applicable evidence, evaluation result/status, evaluation time, and relevant reason or rule context.
+
+## Configurable Operational Consequences
+
+A future compliance rule may produce configurable consequences such as:
+
+- Prevent assignment
+- Prevent scheduling
+- Prevent activation/work authorization
+- Prevent payment
+- Restrict particular services
+- Require administrative approval
+- Allow assignment with warning
+
+These consequences must be organization-configurable rather than hard-coded into the core platform.
+
+The evaluation layer must remain separate from the operational consequence so organizations can change policy without changing the underlying compliance evidence model.
+
+## Expiration, Renewal, Notifications, and Escalation
+
+Compliance evidence may have configurable expiration and renewal information.
+
+Organizations should eventually be able to configure thresholds and resulting notifications/escalations. Example:
+
+- 60 days before expiration → warning
+- 30 days before expiration → escalation
+
+Thresholds, recipients, notification channels, and escalation behavior should be configurable.
+
+## Controlled Compliance Override
+
+Authorized administrators may eventually apply a controlled compliance override.
+
+An override must record:
+
+- Requirement
+- Contractor/resource
+- Reason
+- Authorizer
+- Effective date
+- Expiration date
+- Scope
+- Audit record
+
+Overrides must be time-bounded, permission-controlled, tenant-scoped, and auditable.
+
+## Shared Document Relationships
+
+Future shared document relationships should support association with:
+
+- Contractor
+- Contract
+- License/credential
+- Insurance policy
+- Qualification
+
+Documents must retain the appropriate organization/tenant relationship and access controls.
+
+## Security, Privacy, and Audit
+
+Future compliance data must preserve the platform's existing architectural requirements for:
+
+- Organization/tenant isolation
+- Backend-enforced permissions
+- Minimum-necessary access
+- Privacy
+- Auditability
+- Historical integrity
+
+Full contractor licensing, insurance, and compliance tracking remains **out of scope for the initial MVP**. No schema, API, UI, scheduling gate, payment gate, or implementation task is mandated by this future architecture section alone.

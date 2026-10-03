@@ -184,6 +184,20 @@ test("durable Appointment / Hold persistence is tenant-safe, auditable, transact
   assert.ok(audit.rows.some(row => row.action === "scheduling-hold.cancelled"));
   assert.ok(audit.rows.some(row => row.action === "scheduling-hold.confirmed"));
 
+  await assert.rejects(
+    () => transaction(principalA, "test.history-mutation", db =>
+      db.query("UPDATE appointment_history SET notes='tampered' WHERE organization_id=$1", [orgA])
+    ),
+    /appointment history is append-only/
+  );
+
+  await assert.rejects(
+    () => transaction(principalA, "test.audit-mutation", db =>
+      db.query("DELETE FROM audit_events WHERE organization_id=$1", [orgA])
+    ),
+    /audit events are append-only/
+  );
+
   const countsBeforeRollback = await transaction(principalA, "test.rollback-count", async db => ({
     appointments: Number((await db.query("SELECT count(*) AS count FROM appointments WHERE organization_id=$1", [orgA])).rows[0].count),
     audits: Number((await db.query("SELECT count(*) AS count FROM audit_events WHERE organization_id=$1", [orgA])).rows[0].count)

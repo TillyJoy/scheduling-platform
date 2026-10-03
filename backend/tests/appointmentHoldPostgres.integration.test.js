@@ -75,7 +75,7 @@ test("durable Appointment / Hold persistence is tenant-safe, auditable, transact
 
   const appointment = await appointmentService.create({
     principal: principalA, id: "appointment-1", clientId: "client-1", propertyId: "property-1",
-    workOrderId: "wo-1", unitIds: ["unit-1"], serviceIds: ["service-opaque-1"], memberIds: ["resource-1"],
+    workOrderId: "wo-1", teamId: "team-opaque-1", unitIds: ["unit-1"], serviceIds: ["service-opaque-1"], memberIds: ["resource-1"],
     startTime: "2026-10-01T09:00:00Z", endTime: "2026-10-01T10:00:00Z", status: "scheduled"
   });
   assert.equal(appointment.id, "appointment-1");
@@ -84,6 +84,7 @@ test("durable Appointment / Hold persistence is tenant-safe, auditable, transact
 
   const loaded = await appointmentService.get({ principal: principalA, appointmentId: "appointment-1" });
   assert.equal(loaded.propertyId, "property-1");
+  assert.equal(loaded.teamId, "team-opaque-1");
   assert.deepEqual(loaded.unitIds, ["unit-1"]);
   assert.deepEqual(loaded.serviceIds, ["service-opaque-1"]);
 

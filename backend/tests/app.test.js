@@ -75,6 +75,169 @@ test("protected API routes require authentication", async () => {
   }
 });
 
+test("application composition wires organization-specific appointment status configuration", () => {
+  const state = createAppState();
+  const permissions = ["appointment:create", "appointment:read", "status:create", "status:read", "status:update"];
+
+  state.statusConfigurationService.createStatus({
+    principal: { userId: "status-admin-a", organizationId: "org-a", permissions },
+    id: "appointment-cancelled-a",
+    organizationId: "org-a",
+    entityType: "appointment",
+    code: "closed",
+    label: "Closed",
+    category: "cancelled"
+  });
+  state.statusConfigurationService.createStatus({
+    principal: { userId: "status-admin-b", organizationId: "org-b", permissions },
+    id: "appointment-closed-b",
+    organizationId: "org-b",
+    entityType: "appointment",
+    code: "closed",
+    label: "Closed",
+    category: "completed"
+  });
+
+  const appointmentStatus = state.appointmentStatusResolver({
+    organizationId: "org-a",
+    entityType: "appointment",
+    statusCode: "closed"
+  });
+  assert.equal(appointmentStatus.organizationId, "org-a");
+  assert.equal(appointmentStatus.category, "cancelled");
+
+  const otherOrganizationStatus = state.appointmentStatusResolver({
+    organizationId: "org-b",
+    entityType: "appointment",
+    statusCode: "closed"
+  });
+  assert.equal(otherOrganizationStatus.organizationId, "org-b");
+  assert.equal(otherOrganizationStatus.category, "completed");
+});
+
+test("appointment conflict behavior uses organization-specific configured status semantics", () => {
+  const state = createAppState({
+    resources: [{ id: "shared-resource", qualifications: ["service-a"], active: true }]
+  });
+  const permissions = ["appointment:create", "appointment:read"];
+
+  state.statusConfigurationService.createStatus({
+    principal: {
+      userId: "status-admin-a",
+      organizationId: "org-a",
+      permissions: ["status:create", "status:read", "status:update"]
+    },
+    id: "appointment-cancelled-a",
+    organizationId: "org-a",
+    entityType: "appointment",
+    code: "closed",
+    label: "Closed",
+    category: "cancelled"
+  });
+  state.statusConfigurationService.createStatus({
+    principal: {
+      userId: "status-admin-b",
+      organizationId: "org-b",
+      permissions: ["status:create", "status:read", "status:update"]
+    },
+    id: "appointment-closed-b",
+    organizationId: "org-b",
+    entityType: "appointment",
+    code: "closed",
+    label: "Closed",
+    category: "completed"
+  });
+
+  const principalA = { userId: "user-a", organizationId: "org-a", permissions };
+  const principalB = { userId: "user-b", organizationId: "org-b", permissions };
+
+  state.appointmentService.create({
+    principal: principalA,
+    id: "appointment-a-1",
+    organizationId: "org-a",
+    clientId: "client-a",
+    propertyId: "property-a",
+    serviceIds: ["service-a"],
+    memberIds: ["shared-resource"],
+    startTime: "2026-10-01T10:00:00Z",
+    endTime: "2026-10-01T11:00:00Z",
+    status: "closed"
+  });
+
+  const orgASecond = state.appointmentService.create({
+    principal: principalA,
+    id: "appointment-a-2",
+    organizationId: "org-a",
+    clientId: "client-a-2",
+    propertyId: "property-a-2",
+    serviceIds: ["service-a"],
+    memberIds: ["shared-resource"],
+    startTime: "2026-10-01T10:30:00Z",
+    endTime: "2026-10-01T11:30:00Z",
+    status: "scheduled"
+  });
+  assert.equal(orgASecond.id, "appointment-a-2");
+
+  state.appointmentService.create({
+    principal: principalB,
+    id: "appointment-b-1",
+    organizationId: "org-b",
+    clientId: "client-b",
+    propertyId: "property-b",
+    serviceIds: ["service-a"],
+    memberIds: ["shared-resource"],
+    startTime: "2026-10-01T10:00:00Z",
+    endTime: "2026-10-01T11:00:00Z",
+    status: "closed"
+  });
+
+  assert.throws(() => state.appointmentService.create({
+    principal: principalB,
+    id: "appointment-b-2",
+    organizationId: "org-b",
+    clientId: "client-b-2",
+    propertyId: "property-b-2",
+    serviceIds: ["service-a"],
+    memberIds: ["shared-resource"],
+    startTime: "2026-10-01T10:30:00Z",
+    endTime: "2026-10-01T11:30:00Z",
+    status: "scheduled"
+  }), /Resource is already assigned to an overlapping appointment/);
+});
+
+test("appointment status configuration preserves default behavior when status is not configured", () => {
+  const state = createAppState({
+    resources: [{ id: "default-resource", qualifications: ["service-a"], active: true }]
+  });
+  const principal = { userId: "user-default", organizationId: "org-default", permissions: ["appointment:create", "appointment:read"] };
+
+  state.appointmentService.create({
+    principal,
+    id: "appointment-default-1",
+    organizationId: "org-default",
+    clientId: "client-default",
+    propertyId: "property-default",
+    serviceIds: ["service-a"],
+    memberIds: ["default-resource"],
+    startTime: "2026-10-01T12:00:00Z",
+    endTime: "2026-10-01T13:00:00Z",
+    status: "cancelled"
+  });
+
+  assert.throws(() => state.appointmentService.create({
+    principal,
+    id: "appointment-default-2",
+    organizationId: "org-default",
+    clientId: "client-default-2",
+    propertyId: "property-default-2",
+    serviceIds: ["service-a"],
+    memberIds: ["default-resource"],
+    startTime: "2026-10-01T12:30:00Z",
+    endTime: "2026-10-01T13:30:00Z",
+    status: "scheduled"
+  }), /Resource is already assigned to an overlapping appointment/);
+});
+
 test("application exposes jobs, availability, and appointment conflict protection", async () => {
   const { server, token } = authenticatedServer();
   await new Promise(resolve => server.listen(0, resolve));

@@ -7,13 +7,15 @@ test("durable JobService uses the repository instead of its in-memory store", as
   const principal = { userId: "user-a", organizationId: "org-a", permissions: ["job:create", "job:read"] };
   const persisted = new Job({ id: "job-1", organizationId: "org-a", title: "Persisted job" });
   const calls = [];
+  let persistedExists = false;
   const repository = {
     async get({ jobId }) {
       calls.push(["get", jobId]);
-      return jobId === "job-1" && calls.length > 1 ? persisted : null;
+      return jobId === "job-1" && persistedExists ? persisted : null;
     },
     async create({ job }) {
       calls.push(["create", job.id]);
+      persistedExists = true;
       return persisted;
     },
     async list() {

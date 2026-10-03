@@ -89,6 +89,8 @@ Configuration may include:
 
 The system must support secure authentication.
 
+Authentication establishes a trusted principal but remains separate from the domain model and authorization model.
+
 Future support should include:
 
 - Password authentication
@@ -96,7 +98,9 @@ Future support should include:
 - Session management
 - Multi-factor authentication
 - Account recovery
-- Organization membership
+- Organization Membership
+
+The domain/application authorization layer must consume the trusted principal rather than depend on a specific authentication provider. Authentication providers must remain replaceable.
 
 ## Roles and Permissions
 
@@ -104,7 +108,11 @@ Permissions must be separate from displayed role names.
 
 Organizations may create custom roles.
 
-Permissions should be granular enough to control:
+Organization Membership establishes a User's organization access. A User may be associated with a Person, but **Person ≠ User**.
+
+Authorization must validate the trusted authenticated principal, Organization Membership, required permission, and target record organization. Caller-supplied organization IDs must not establish authorization.
+
+Permissions should follow least-privilege principles and be granular enough to control:
 
 - View
 - Create

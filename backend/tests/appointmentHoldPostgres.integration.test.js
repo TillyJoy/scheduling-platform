@@ -40,9 +40,14 @@ test("durable Appointment / Hold persistence is tenant-safe, auditable, transact
   const appointmentRepository = new AppointmentRepository({ pool });
   const schedulingHoldRepository = new SchedulingHoldRepository({ pool });
   let now = new Date("2026-10-01T08:00:00Z");
+  const schedulingService = {
+    findAvailableSlots: ({ resourceIds, startTime, endTime }) =>
+      resourceIds.map(resourceId => ({ resourceId, startTime, endTime }))
+  };
   const appointmentService = new AppointmentService({
     appointmentRepository,
     schedulingHoldRepository,
+    schedulingService,
     transaction,
     clock: () => now
   });

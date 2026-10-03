@@ -86,7 +86,7 @@ test("durable Appointment / Hold persistence is tenant-safe, auditable, transact
   await pool.query(`CREATE ROLE "${roleName}" NOLOGIN NOSUPERUSER NOBYPASSRLS`);
   await pool.query(`GRANT USAGE ON SCHEMA public TO "${roleName}"`);
   await pool.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON organizations, clients, properties, units, jobs, work_orders, resources, appointments, appointment_units, appointment_services, appointment_resources, appointment_history, scheduling_holds, scheduling_hold_resources TO "${roleName}"`);
-  await pool.query(`GRANT SELECT, INSERT ON audit_events TO "${roleName}"`);
+  await pool.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON audit_events TO "${roleName}"`);
 
   const appointment = await appointmentService.create({
     principal: principalA, id: "appointment-1", clientId: clientA, propertyId: propertyA,

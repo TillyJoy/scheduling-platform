@@ -46,7 +46,7 @@ function request(server, method, path, body, headers = {}) {
   });
 }
 
-function authenticatedServer(permissions = ["appointment:create", "appointment:read"]) {
+function authenticatedServer(permissions = ["job:read", "appointment:create", "appointment:read"]) {
   const authenticationService = new AuthenticationService({ secret: AUTH_SECRET });
   const token = authenticationService.issueToken({
     userId: "demo-user",

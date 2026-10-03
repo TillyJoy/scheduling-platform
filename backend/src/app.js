@@ -14,6 +14,8 @@ const { FieldExecutionSyncService } = require("./services/fieldExecutionSyncServ
 const { FieldVisitRepository } = require("./repositories/fieldVisitRepository");
 const { ActualWorkRepository } = require("./repositories/actualWorkRepository");
 const { FieldExecutionOperationRepository } = require("./repositories/fieldExecutionOperationRepository");
+const { JobRepository } = require("./repositories/jobRepository");
+const { WorkOrderRepository } = require("./repositories/workOrderRepository");
 const { withTransaction } = require("./database");
 
 const MAX_BODY_BYTES = 1024 * 1024;
@@ -57,14 +59,16 @@ function createAppState(seed = {}) {
     ])
   );
   const jobStore = new Map(jobs.map(job => [JSON.stringify([job.organizationId, job.id]), job]));
-  const jobService = new JobService({ jobStore, authorize: () => true });
   const workOrderStore = new Map(workOrders.map(order => [JSON.stringify([order.organizationId, order.id]), order]));
-  const workOrderService = new WorkOrderService({ workOrderStore, jobService });
   const domainEventService = new DomainEventService({ eventStore: domainEvents, auditStore: auditEvents });
   const databasePool = seed.databasePool || null;
   const transaction = databasePool
     ? (principal, action, work) => withTransaction(databasePool, { organizationId: principal.organizationId, userId: principal.userId, action }, work)
     : null;
+  const jobRepository = databasePool ? new JobRepository({ pool: databasePool }) : null;
+  const workOrderRepository = databasePool ? new WorkOrderRepository({ pool: databasePool }) : null;
+  const jobService = new JobService({ jobStore, jobRepository, transaction });
+  const workOrderService = new WorkOrderService({ workOrderStore, workOrderRepository, transaction, jobService });
   const fieldVisitRepository = databasePool ? new FieldVisitRepository({ pool: databasePool }) : null;
   const actualWorkRepository = databasePool ? new ActualWorkRepository({ pool: databasePool }) : null;
   const fieldExecutionOperationRepository = databasePool ? new FieldExecutionOperationRepository({ pool: databasePool }) : null;
@@ -154,8 +158,33 @@ function principal() {
   return {
     userId: "demo-user",
     organizationId: "demo-org",
-    permissions: ["appointment:create", "appointment:read", "appointment:confirm", "appointment:cancel", "fieldVisit:create", "fieldVisit:read", "fieldVisit:update", "actualWork:create", "actualWork:read", "fieldExecution:sync"]
+    permissions: ["job:create", "job:read", "workOrder:create", "workOrder:read", "appointment:create", "appointment:read", "appointment:confirm", "appointment:cancel", "fieldVisit:create", "fieldVisit:read", "fieldVisit:update", "actualWork:create", "actualWork:read", "fieldExecution:sync"]
   };
+}
+
+async function ensureDurableDemoData(state) {
+  if (!state.databasePool || process.env.NODE_ENV !== "development") return;
+  const demoPrincipal = principal();
+  await state.transaction(demoPrincipal, "demo.bootstrap", async db => {
+    await db.query(
+      "INSERT INTO organizations (id, name) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING",
+      ["demo-org", "Demo Organization"]
+    );
+  });
+  const existing = await state.jobService.getForOrganization({
+    organizationId: "demo-org",
+    jobId: "job-1"
+  });
+  if (!existing) {
+    await state.jobService.create({
+      principal: demoPrincipal,
+      id: "job-1",
+      title: "Demo Client — 123 Main St",
+      clientId: null,
+      serviceIds: ["AMP", "WX"],
+      statusCode: "ready_to_schedule"
+    });
+  }
 }
 
 function serializeFieldVisit(visit) {
@@ -291,7 +320,7 @@ function createHandler(state, {
       }
 
       if (req.method === "GET" && path === "/api/jobs") {
-        return json(res, 200, state.jobs.filter(job => job.organizationId === p.organizationId));
+        return json(res, 200, await state.jobService.list({ principal: p }));
       }
       if (req.method === "GET" && path === "/api/resources") {
         return json(res, 200, state.resources.filter(resource => resource.active !== false));
@@ -430,4 +459,4 @@ function createHandler(state, {
   };
 }
 
-module.exports = { createAppState, createHandler };
+module.exports = { createAppState, createHandler, ensureDurableDemoData };

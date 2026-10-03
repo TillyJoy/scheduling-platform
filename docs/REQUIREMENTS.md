@@ -36,47 +36,67 @@ The application must be capable of operating independently or integrating with e
 
 # 2. Core Design Principle
 
-The application separates:
+The application separates operational work from scheduled time and actual execution.
 
-## Program/Job Management
+## Operational Work
 
-Primarily managed by external systems such as Monday.com.
+The platform models a **Job** as a unit of operational work and a **Work Order** as planned, defined, or executable work associated with that Job.
 
-Examples:
+A Job may originate from:
 
-- Eligibility
-- Funding
-- Job status
-- Assessment status
-- Prior work
-- Job numbers
-- Service decisions
-- Work performed
-- Payment/job workflow
-- Program documentation
+- Application
+- Intake
+- Referral
+- Manual creation
+- Recurring work
+- External integration
+- Other configured workflows
 
-## Appointment Management
+Jobs and Work Orders are configurable, organization-scoped domain concepts. Their lifecycles, terminology, permissions, dependencies, and automation must not be hard-coded to the initial agency workflow.
 
-Managed by the scheduling platform.
+## Scheduling
 
-Examples:
+An **Appointment** represents scheduled time or a scheduled occurrence.
 
-- Appointment date and time
-- Appointment duration
-- Assigned Auditor
-- Assigned Contractor
-- Selected services
-- Selected units
-- Travel/buffer requirements
-- Client scheduling
-- Rescheduling
-- Cancellation
-- Appointment notifications
-- Scheduler workflow
+A Job may have multiple Appointments. A Work Order may reference scheduling occurrences as required by configuration.
 
-External systems and the scheduling platform must be able to exchange information in both directions.
+## Actual Work
 
----
+A **Field Visit** represents an instance of actual field execution when that operational concept applies. Actual work must not be inferred solely from the existence or completion of an Appointment.
+
+The platform must preserve the distinction between:
+
+- Planned/defined work
+- Scheduled time
+- Actual work performed
+
+Therefore:
+
+- **Job ≠ Work Order**
+- **Job ≠ Appointment**
+- **Work Order ≠ Appointment**
+- **Appointment ≠ Field Visit**
+- **Work Order ≠ Field Visit**
+
+## Work Order Numbering
+
+Work Orders must support unique, configurable identifiers, including numeric and alphanumeric formats, prefixes, suffixes, date/service components, automatic numbering, and authorized manual modification.
+
+Work Order Numbers are distinct from existing **Job Number** concepts. Existing Job Numbers must not be reinterpreted as Work Order Numbers.
+
+## Work Order Dependencies
+
+The platform may support configurable sequential, prerequisite, parent/child, parallel, required-completion, approval, and conditional dependencies between Work Orders.
+
+## Documents and History
+
+Jobs and Work Orders may be associated with documents, communications, funding, billing, resources, assignments, scheduling records, and audit/history records as applicable.
+
+Important Job and Work Order events must remain historically traceable. Business history is distinct from the technical Audit Log.
+
+## External Systems
+
+External systems such as Monday.com may originate or synchronize Job-related information, but they must not redefine the core Job, Work Order, Appointment, or Field Visit boundaries. The platform's internal domain model remains industry-neutral and configuration-driven.
 
 # 3. Initial Users
 

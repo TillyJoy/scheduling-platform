@@ -23,7 +23,11 @@ class AppointmentRepository {
        record.schedulerId, record.clientSchedulingIndicator, record.internalNotes,
        record.cancellationReason, record.rescheduleReason, now, now]
     );
-    const saved = this.#map(result.rows[0]);
+    const saved = this.#map(result.rows[0], {
+      unitIds: record.unitIds,
+      serviceIds: record.serviceIds,
+      memberIds: record.memberIds
+    });
     await this.#replaceChildren({ principal, appointment: saved, db });
     await this.#recordHistory(principal, saved, "created", null, saved, db, now);
     await this.#audit(principal, "appointment.created", saved.id, null, saved, db, now);

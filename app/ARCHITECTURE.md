@@ -772,3 +772,55 @@ The following existing boundaries remain authoritative:
 - the Durable Persistence Architecture Contract.
 
 These workflow decisions are architectural contracts. Exact database schemas, API route shapes, UI components, worker technology, and other implementation details remain implementation concerns unless they materially change one of these contracts.
+
+---
+
+## Future Contractor Compliance Architecture
+
+Contractor/external-resource compliance is a later-phase capability and is explicitly outside the initial MVP.
+
+The future architecture should preserve this neutral abstraction:
+
+**Contractor/External Resource → Configurable Requirements → Evidence → Evaluation → Configurable Operational Rule → Assignment/Scheduling/Work Consequence**
+
+The platform should distinguish:
+
+- **Compliance Requirement** — what an organization, service, or assignment requires.
+- **Compliance Evidence** — the credential, license, certification, insurance policy, contract/document, or other evidence that may satisfy a requirement.
+- **Compliance Evaluation** — whether the applicable requirement is currently satisfied.
+
+Compliance must not be modeled as a single Boolean contractor status.
+
+Future compliance rules may be configured to produce operational consequences including:
+
+- Prevent assignment
+- Prevent scheduling
+- Prevent activation/work authorization
+- Prevent payment
+- Restrict particular services
+- Require administrative approval
+- Allow assignment with warning
+
+These consequences must remain configurable policy/rule behavior rather than hard-coded contractor states.
+
+Future compliance administration should also support:
+
+- Configurable requirements
+- Licenses and credentials
+- Insurance policies
+- Qualifications and certifications
+- Contracts and agreements
+- Expiration and renewal information
+- Supporting documents
+- Verification information
+- Compliance status/evaluation
+- Configurable expiration warnings and escalations
+- Controlled, time-bounded compliance overrides
+
+A compliance override must preserve the requirement, contractor/resource, reason, authorizer, effective date, expiration date, scope, and audit record.
+
+Shared document relationships should eventually support association with contractors, contracts, licenses/credentials, insurance policies, and qualifications.
+
+Any future compliance implementation must preserve organization/tenant isolation, backend-enforced permissions, privacy/minimum-necessary access, and auditability. The compliance architecture should integrate with the existing resource, qualification, scheduling, assignment, notification, document, and audit boundaries rather than creating contractor-specific core logic.
+
+This is an architectural target only. It does **not** add an initial-MVP implementation item.

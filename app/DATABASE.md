@@ -21,6 +21,16 @@ The database must:
 - Support external system identifiers
 - Support detailed audit logging
 
+## Person
+
+A Person represents an individual known to an organization and is independent of authentication.
+
+A Person may exist without a User account and may be associated with a User when appropriate.
+
+**Person ≠ User.**
+
+The Person model is domain-neutral and must not be replaced by a specific organization role such as Client, Auditor, or Contractor.
+
 ## Organization
 
 An Organization represents an agency or other organization using the platform.
@@ -53,25 +63,41 @@ An organization may have multiple departments.
 
 ## User
 
-A User represents a person with access to the application.
+A User represents an authenticated platform account.
 
-A User may belong to:
+A User is not synonymous with a Person. A User may be associated with one Person, but a Person does not require a User account.
 
-- One organization
-- One or more departments
-- One or more roles
+Authentication information belongs to the authentication boundary; the domain model consumes the trusted principal rather than depending on a particular authentication provider.
 
 Fields may include:
 
 - User ID
-- Organization ID
-- Name
-- Email
-- Phone
 - Status
-- Authentication information
 - Created date
 - Updated date
+
+## Organization Membership
+
+Organization Membership represents a User's access relationship to an Organization.
+
+Membership may establish:
+
+- User ID
+- Organization ID
+- Membership status
+- Roles
+- Permission scope
+- Department/resource scope where applicable
+- Created date
+- Updated date
+
+Organization Membership is the appropriate abstraction for organization access. Organization IDs supplied by callers do not establish membership or authorization.
+
+## Technical / Service Identity
+
+The data model may support non-human technical identities such as API clients, integration accounts, automated services, scheduled processes, and webhook processors.
+
+Technical identities must have explicit organization scope and permissions, and their actions must remain auditable.
 
 ## Role
 
@@ -598,6 +624,8 @@ Historical records may include:
 ## Audit Log
 
 Audit records must be stored separately and must follow the requirements in `AUDIT_LOG.md`.
+
+Audit actor identity must derive from the trusted authenticated principal or explicitly authenticated technical identity. Arbitrary caller-provided actor IDs must not establish audit identity for security-sensitive actions.
 
 ## Archiving
 

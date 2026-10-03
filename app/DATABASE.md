@@ -21,6 +21,16 @@ The database must:
 - Support external system identifiers
 - Support detailed audit logging
 
+## Person
+
+A Person represents an individual known to an organization and is independent of authentication.
+
+A Person may exist without a User account and may be associated with a User when appropriate.
+
+**Person ≠ User.**
+
+The Person model is domain-neutral and must not be replaced by a specific organization role such as Client, Auditor, or Contractor.
+
 ## Organization
 
 An Organization represents an agency or other organization using the platform.
@@ -598,6 +608,8 @@ Historical records may include:
 ## Audit Log
 
 Audit records must be stored separately and must follow the requirements in `AUDIT_LOG.md`.
+
+Audit actor identity must derive from the trusted authenticated principal or explicitly authenticated technical identity. Arbitrary caller-provided actor IDs must not establish audit identity for security-sensitive actions.
 
 ## Archiving
 

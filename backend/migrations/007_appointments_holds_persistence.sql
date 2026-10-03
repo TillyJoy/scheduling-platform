@@ -221,3 +221,17 @@ DROP POLICY IF EXISTS scheduling_hold_resources_tenant_isolation ON scheduling_h
 CREATE POLICY scheduling_hold_resources_tenant_isolation ON scheduling_hold_resources
   USING (organization_id = current_setting('app.organization_id', true))
   WITH CHECK (organization_id = current_setting('app.organization_id', true));
+
+CREATE OR REPLACE FUNCTION prevent_appointment_history_mutation()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RAISE EXCEPTION 'appointment history is append-only';
+END;
+$$;
+
+DROP TRIGGER IF EXISTS appointment_history_no_update ON appointment_history;
+CREATE TRIGGER appointment_history_no_update
+BEFORE UPDATE OR DELETE ON appointment_history
+FOR EACH ROW EXECUTE FUNCTION prevent_appointment_history_mutation();

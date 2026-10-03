@@ -93,6 +93,36 @@ Test on:
 - Widget actions
 - Driving mode
 
+## Cross-Platform Browser MVP Verification
+
+The MVP is a single responsive browser-based application intended to support Chromebook, Windows PC, macOS, Android phone/tablet, iPhone, and iPad. Verification must evaluate the same deployed web application rather than separate platform-specific applications.
+
+### Acceptance criteria
+
+"Browser MVP verified" requires:
+
+1. The deployed application is reachable through a normal supported browser.
+2. Production authentication works.
+3. The core MVP workflow works.
+4. The application is responsive on desktop and mobile/tablet form factors.
+5. The practical workflow has been interactively verified on representative supported platforms:
+   - Chromebook
+   - Windows PC
+   - macOS
+   - Android
+   - iPhone
+   - iPad
+6. No platform-specific blocker prevents normal MVP use.
+7. Interactive browser verification is distinguished from HTTP/API smoke testing.
+
+The eventual interactive workflow should cover, as applicable:
+
+**Open deployed application → authenticate → reach application → load organization/user context → access jobs/work orders → access resources/scheduling data → select date/time → view availability → create appointment → view resulting appointment → navigate the application → verify responsive layout and interaction.**
+
+Touch interaction must be included on touch platforms where applicable.
+
+No platform may be marked VERIFIED without actual interactive verification evidence for that platform. This testing requirement does not establish that any platform is currently verified. Production deployment, authentication implementation, feature completeness, and interactive browser verification remain separate status dimensions.
+
 ## Client Portal Testing
 
 Test:

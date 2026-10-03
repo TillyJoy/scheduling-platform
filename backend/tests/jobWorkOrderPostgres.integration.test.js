@@ -5,7 +5,6 @@ if (!process.env.DATABASE_URL || process.env.RUN_POSTGRES_TESTS !== "1") {
   test("PostgreSQL Job / Work Order integration tests require RUN_POSTGRES_TESTS=1 and DATABASE_URL", { skip: true }, () => {});
 } else {
   const { createDatabasePool, runMigrations, withTransaction } = require("../src/database");
-  const { ClientRepository } = require("../src/repositories/clientRepository");
   const { JobRepository } = require("../src/repositories/jobRepository");
   const { WorkOrderRepository } = require("../src/repositories/workOrderRepository");
   const { JobService } = require("../src/services/jobService");
@@ -81,7 +80,6 @@ if (!process.env.DATABASE_URL || process.env.RUN_POSTGRES_TESTS !== "1") {
     const transaction = (principal, action, work) => appTransaction(principal, action, work);
     const jobRepository = new JobRepository({ pool });
     const workOrderRepository = new WorkOrderRepository({ pool });
-    const clientRepository = new ClientRepository({ pool });
     const jobService = new JobService({ jobRepository, transaction });
     const workOrderService = new WorkOrderService({ workOrderRepository, transaction, jobService });
 
@@ -186,12 +184,12 @@ if (!process.env.DATABASE_URL || process.env.RUN_POSTGRES_TESTS !== "1") {
     const isolated = await appTransaction(principalB, "test.isolation", async db => {
       const jobs = await db.query("SELECT id FROM jobs ORDER BY id");
       const orders = await db.query("SELECT id, number FROM work_orders ORDER BY id");
-      const clients = await clientRepository.listPage({ principal: principalB, limit: 10 });
-      return { jobs: jobs.rows, orders: orders.rows, clients };
+      const clients = await db.query("SELECT id FROM clients ORDER BY id");
+      return { jobs: jobs.rows, orders: orders.rows, clients: clients.rows };
     });
     assert.deepEqual(isolated.jobs.map(row => row.id), ["job-1"]);
     assert.deepEqual(isolated.orders.map(row => row.id), ["wo-1"]);
-    assert.equal(isolated.clients.items.length, 1);
+    assert.deepEqual(isolated.clients.map(row => row.id), [`client-${orgB}`]);
 
     const countsBeforeFailure = await appTransaction(principalA, "test.count-before-failure", async db => {
       const jobs = await db.query("SELECT count(*)::int AS count FROM jobs WHERE organization_id = $1", [orgA]);

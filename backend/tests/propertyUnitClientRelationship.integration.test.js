@@ -1,0 +1,23 @@
+const test=require("node:test"); const assert=require("node:assert/strict");
+const {createDatabasePool,runMigrations,withTransaction}=require("../src/database");
+const {PropertyRepository}=require("../src/repositories/propertyRepository"); const {UnitRepository}=require("../src/repositories/unitRepository"); const {ClientPropertyRelationshipRepository}=require("../src/repositories/clientPropertyRelationshipRepository"); const {ClientPropertyRelationshipService}=require("../src/services/clientPropertyRelationshipService");
+const shouldRun=process.env.DATABASE_URL&&process.env.RUN_POSTGRES_TESTS==="1";
+const principal={userId:"relationship-test-user",organizationId:"relationship-test-org",permissions:["property:create","unit:create","clientPropertyRelationship:create","clientPropertyRelationship:update","clientPropertyRelationship:read"]};
+test("durable property/unit/client relationships preserve history, auditability, and tenant isolation",{skip:!shouldRun},async()=>{
+ const pool=createDatabasePool(); await runMigrations(pool); const now=new Date("2026-10-03T12:00:00Z"); const transaction=(p,a,w)=>withTransaction(pool,{organizationId:p.organizationId,userId:p.userId,action:a},w);
+ const propertyRepository=new PropertyRepository({pool,clock:()=>now}); const unitRepository=new UnitRepository({pool,clock:()=>now}); const relationshipRepository=new ClientPropertyRelationshipRepository({pool,clock:()=>now}); const service=new ClientPropertyRelationshipService({propertyRepository,unitRepository,relationshipRepository,transaction});
+ const other={...principal,userId:"other-user",organizationId:"other-org"}; const clean=async()=>{await pool.query("DELETE FROM client_property_relationships WHERE organization_id IN ('relationship-test-org','other-org')");await pool.query("DELETE FROM units WHERE organization_id IN ('relationship-test-org','other-org')");await pool.query("DELETE FROM properties WHERE organization_id IN ('relationship-test-org','other-org')");await pool.query("DELETE FROM audit_events WHERE organization_id IN ('relationship-test-org','other-org')");await pool.query("DELETE FROM clients WHERE organization_id IN ('relationship-test-org','other-org')");await pool.query("DELETE FROM organizations WHERE id IN ('relationship-test-org','other-org')");};
+ try{
+  await pool.query("INSERT INTO organizations (id,name) VALUES ('relationship-test-org','Relationship Test'),('other-org','Other')");
+  await pool.query("INSERT INTO clients (id,organization_id,first_name,last_name) VALUES ('client-r1','relationship-test-org','Test','One'),('client-r2','other-org','Test','Two')");
+  const property=await service.createProperty({principal,id:"property-r1",address:"1 Main St",city:"Example",state:"MA"}); const unit=await service.createUnit({principal,id:"unit-r1",propertyId:property.id,unitIdentifier:"1"});
+  const first=await service.createRelationship({principal,id:"rel-r1",clientId:"client-r1",propertyId:property.id,unitId:unit.id,relationshipType:"resident",startAt:"2026-01-01T00:00:00Z"});
+  const closed=await service.closeRelationship({principal,relationshipId:first.id,endAt:"2026-06-30T00:00:00Z"}); assert.equal(closed.endAt.toISOString(),"2026-06-30T00:00:00.000Z");
+  const current=await service.createRelationship({principal,id:"rel-r2",clientId:"client-r1",propertyId:property.id,unitId:unit.id,relationshipType:"resident",startAt:"2026-07-01T00:00:00Z"});
+  assert.equal((await service.listClientRelationships({principal,clientId:"client-r1"})).length,2); assert.equal((await service.listPropertyRelationships({principal,propertyId:property.id,unitId:unit.id})).length,2);
+  await assert.rejects(service.createRelationship({principal,id:"rel-r3",clientId:"client-r1",propertyId:property.id,unitId:unit.id,relationshipType:"resident",startAt:"2026-08-01T00:00:00Z"}),/duplicate key/);
+  assert.equal((await service.listClientRelationships({principal:other,clientId:"client-r1"})).length,0);
+  const audit=await pool.query("SELECT action FROM audit_events WHERE organization_id=$1 ORDER BY created_at,id",[principal.organizationId]); assert.deepEqual(audit.rows.map(r=>r.action),["property.created","unit.created","client-property-relationship.created","client-property-relationship.closed","client-property-relationship.created"]);
+  assert.equal((await relationshipRepository.get({principal,relationshipId:current.id})).id,current.id);
+ } finally {await clean();await pool.end();}
+});

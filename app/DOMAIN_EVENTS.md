@@ -68,3 +68,14 @@ Before production event processing is enabled, the platform will need explicit d
 - retention
 - event schema/version evolution
 - authorization for sensitive event payloads
+
+
+## Workflow-Triggered Event Processing
+
+Workflow-triggered domain events follow the existing domain-event and durable-outbox architecture.
+
+Where workflow actions or event delivery can be retried or replayed, the applicable operation/event/consumer boundary must provide idempotency. Idempotency must be scoped to the organization and must preserve the underlying business invariant; it is not a universal replacement for operation-specific concurrency or business rules.
+
+Once a core workflow transition has committed, downstream notification, integration, or automation failure does not ordinarily roll back that committed lifecycle transition. The durable outbox and background processing architecture provide the post-commit boundary for retry, failure tracking, and reconciliation.
+
+Automated workflow actions must carry an explicit service/automation identity so downstream processing and audit records do not attribute automated work to an anonymous or misleading human actor.

@@ -238,6 +238,10 @@ Administrators should configure:
 - Templates
 - Enable/disable settings
 
+Notification and communication preferences are a first-class architectural requirement. The architecture must account for recipient and channel preferences and how those preferences interact with configurable notification rules. Preferences must operate within existing organization/tenant isolation, the permission model, notification-rule configuration, recipient resolution, and delivery-channel architecture.
+
+This is an architectural requirement only. The existence of the notification foundation does not imply that notification preferences are currently implemented, and this requirement does not by itself add notification preferences to MVP implementation scope.
+
 ## Integration Security
 
 External credentials must never be stored in source code.

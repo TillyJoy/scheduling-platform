@@ -131,7 +131,7 @@ if (!process.env.DATABASE_URL || process.env.RUN_POSTGRES_TESTS !== "1") {
     assert.equal(otherOrder.number, "WO-1");
 
     await assert.rejects(
-      () => workOrderService.create({
+      async () => await workOrderService.create({
         principal: principalA,
         id: "wo-cross",
         jobId: "job-1-from-b",

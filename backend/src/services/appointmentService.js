@@ -407,7 +407,12 @@ class AppointmentService {
   }
 
   #assertExactAvailabilityIfRequested(candidate, requested) {
-    if (!requested || !this.schedulingService) return;
+    if (!requested) return;
+    if (!this.schedulingService) {
+      const error = new Error("Scheduling availability is required to create an appointment");
+      error.statusCode = 500;
+      throw error;
+    }
     this.#assertExactAvailability(candidate);
   }
 

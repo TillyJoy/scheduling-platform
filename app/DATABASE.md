@@ -773,9 +773,7 @@ The project has approved the following as the **default implementation order for
 
 This is the project's default **overall** durable-persistence migration sequence. It includes stages that are already durably implemented for completeness, dependency context, and migration history; already-completed migrations are not repeated. Implementation proceeds from the first applicable incomplete persistence slice. Based on the current repository state, Client and Field Visit / Actual Work persistence already exist, so the next incomplete authorized slice is Job / Work Order.
 
-This clarification does not change the approved eight-step sequence or MVP scope. It may be adjusted when a concrete architectural dependency, technical constraint, or implementation finding requires a different order. Any material deviation must be documented in the authoritative Open Questions/architecture records before implementation proceeds.
-
-The eight-step sequence is the project's default **overall** durable-persistence migration sequence. It includes stages that have already been durably implemented for completeness, dependency context, and migration history; completed stages are not repeated. Implementation proceeds from the first applicable incomplete persistence slice. Based on the current repository state, Client and Field Visit / Actual Work persistence already exist, so Job / Work Order is the next incomplete authorized slice.
+This clarification does not change the approved eight-step sequence or MVP scope. The sequence may be adjusted only when a concrete architectural dependency, technical constraint, or implementation finding requires a different order. Any material deviation must be documented in the authoritative Open Questions/architecture records before implementation proceeds.
 
 This decision does not require all stages to be implemented immediately, does not expand MVP scope by itself, and does not authorize unrelated runtime functionality.
 

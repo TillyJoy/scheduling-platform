@@ -362,3 +362,4 @@ Survey reporting must inherit the survey's privacy, anonymity, organization, dep
 Anonymous survey responses must not be exposed through drill-downs, exports, filters, or derived analytics in a way that defeats the configured anonymity policy.
 
 Survey analytics should use durable survey response records as source data and must not require surveys to be part of the core scheduling workflow.
+

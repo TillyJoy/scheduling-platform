@@ -52,7 +52,8 @@ CREATE TABLE IF NOT EXISTS actual_work (
   unit TEXT,
   metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (organization_id, id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_actual_work_org_visit

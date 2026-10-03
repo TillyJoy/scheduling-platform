@@ -16,6 +16,14 @@ const { ActualWorkRepository } = require("./repositories/actualWorkRepository");
 const { FieldExecutionOperationRepository } = require("./repositories/fieldExecutionOperationRepository");
 const { JobRepository } = require("./repositories/jobRepository");
 const { WorkOrderRepository } = require("./repositories/workOrderRepository");
+const { ResourceRepository } = require("./repositories/resourceRepository");
+const { QualificationRepository } = require("./repositories/qualificationRepository");
+const { ResourceQualificationRepository } = require("./repositories/resourceQualificationRepository");
+const { AvailabilityRepository } = require("./repositories/availabilityRepository");
+const { ResourceService } = require("./services/resourceService");
+const { QualificationService } = require("./services/qualificationService");
+const { ResourceQualificationService } = require("./services/resourceQualificationService");
+const { AvailabilityService } = require("./services/availabilityService");
 const { withTransaction } = require("./database");
 
 const MAX_BODY_BYTES = 1024 * 1024;
@@ -67,8 +75,36 @@ function createAppState(seed = {}) {
     : null;
   const jobRepository = databasePool ? new JobRepository({ pool: databasePool }) : null;
   const workOrderRepository = databasePool ? new WorkOrderRepository({ pool: databasePool }) : null;
+  const resourceRepository = databasePool ? new ResourceRepository({ pool: databasePool }) : null;
+  const qualificationRepository = databasePool ? new QualificationRepository({ pool: databasePool }) : null;
+  const resourceQualificationRepository = databasePool ? new ResourceQualificationRepository({ pool: databasePool }) : null;
+  const availabilityRepository = databasePool ? new AvailabilityRepository({ pool: databasePool }) : null;
+  const resourceStore = new Map(resources.map(resource => [JSON.stringify([resource.organizationId || "demo-org", resource.id]), resource]));
+  const qualificationStore = new Map();
+  const resourceQualificationStore = new Map();
+  const availabilityStore = new Map(
+    availabilities.filter(availability => availability.id).map(availability => [
+      JSON.stringify([availability.organizationId || "demo-org", availability.id]),
+      availability
+    ])
+  );
   const jobService = new JobService({ jobStore, jobRepository, transaction });
   const workOrderService = new WorkOrderService({ workOrderStore, workOrderRepository, transaction, jobService });
+  const resourceService = new ResourceService({ resourceStore, resourceRepository, transaction });
+  const qualificationService = new QualificationService({ qualificationStore, qualificationRepository, transaction });
+  const resourceQualificationService = new ResourceQualificationService({
+    resourceQualificationStore,
+    resourceQualificationRepository,
+    resourceRepository,
+    qualificationRepository,
+    transaction
+  });
+  const availabilityService = new AvailabilityService({
+    availabilityStore,
+    availabilityRepository,
+    resourceRepository,
+    transaction
+  });
   const fieldVisitRepository = databasePool ? new FieldVisitRepository({ pool: databasePool }) : null;
   const actualWorkRepository = databasePool ? new ActualWorkRepository({ pool: databasePool }) : null;
   const fieldExecutionOperationRepository = databasePool ? new FieldExecutionOperationRepository({ pool: databasePool }) : null;
@@ -142,6 +178,10 @@ function createAppState(seed = {}) {
     domainEvents,
     jobService,
     workOrderService,
+    resourceService,
+    qualificationService,
+    resourceQualificationService,
+    availabilityService,
     fieldVisitService,
     actualWorkService,
     fieldExecutionSyncService,

@@ -28,6 +28,7 @@ class ClientPropertyRelationshipRepository {
     const current=await this.get({principal,relationshipId,db}); if(!current)throw new Error("Client-property relationship not found");
     if(current.endAt)throw new Error("Client-property relationship is already closed"); if(end<=current.startAt)throw new Error("endAt must be after startAt");
     const result=await db.query("UPDATE client_property_relationships SET end_at=$3 WHERE organization_id=$1 AND id=$2 AND end_at IS NULL RETURNING *",[principal.organizationId,relationshipId,end]);
+    if(!result.rowCount)throw new Error("Client-property relationship is already closed");
     const saved=this.#map(result.rows[0]); await this.#audit(principal,"client-property-relationship.closed",relationshipId,current,saved,db,this.clock()); return saved;
   }
   #map(row){return new ClientPropertyRelationship({id:row.id,organizationId:row.organization_id,clientId:row.client_id,propertyId:row.property_id,unitId:row.unit_id,relationshipType:row.relationship_type,startAt:row.start_at,endAt:row.end_at,createdAt:row.created_at});}

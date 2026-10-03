@@ -22,8 +22,19 @@ CREATE TABLE IF NOT EXISTS units (
   FOREIGN KEY (organization_id, property_id) REFERENCES properties(organization_id, id)
 );
 
-ALTER TABLE clients
-  ADD CONSTRAINT clients_organization_id_id_key UNIQUE (organization_id, id);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conrelid = 'clients'::regclass
+      AND conname = 'clients_organization_id_id_key'
+  ) THEN
+    ALTER TABLE clients
+      ADD CONSTRAINT clients_organization_id_id_key UNIQUE (organization_id, id);
+  END IF;
+END
+$$;
 
 CREATE TABLE IF NOT EXISTS client_property_relationships (
   id TEXT PRIMARY KEY,
@@ -48,10 +59,10 @@ CREATE INDEX IF NOT EXISTS idx_client_property_relationships_org_property_start 
 CREATE INDEX IF NOT EXISTS idx_client_property_relationships_org_unit_start ON client_property_relationships (organization_id, unit_id, start_at DESC, id DESC);
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_client_property_relationship_active_property
-  ON client_property_relationships (organization_id, client_id, property_id)
+  ON client_property_relationships (organization_id, client_id, property_id, relationship_type)
   WHERE end_at IS NULL AND unit_id IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_client_property_relationship_active_unit
-  ON client_property_relationships (organization_id, client_id, unit_id)
+  ON client_property_relationships (organization_id, client_id, unit_id, relationship_type)
   WHERE end_at IS NULL AND unit_id IS NOT NULL;
 
 ALTER TABLE properties ENABLE ROW LEVEL SECURITY;

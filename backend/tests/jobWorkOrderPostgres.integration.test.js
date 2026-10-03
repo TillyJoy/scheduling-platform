@@ -159,15 +159,15 @@ if (!process.env.DATABASE_URL || process.env.RUN_POSTGRES_TESTS !== "1") {
     const afterDuplicate = await workOrderService.list({ principal: principalA, jobId: "job-1" });
     assert.equal(afterDuplicate.length, 4);
 
-    const missingClient = await assert.rejects(
+    await assert.rejects(
       () => jobService.create({
         principal: principalA,
         id: "job-missing-client",
         title: "Invalid client",
         clientId: `client-${orgB}`
-      })
+      }),
+      /foreign key/i
     );
-    assert.equal(missingClient, undefined);
 
     const audit = await appTransaction(principalA, "test.audit-read", db => db.query(
       `SELECT action, entity_type, entity_id

@@ -543,3 +543,53 @@ The organization operates the application independently.
 The product updates itself through centrally managed releases.
 
 The organization can diagnose and resolve common problems without contacting the product owner.
+
+---
+
+## Future Contractor Compliance & Administration
+
+Contractor/external-resource compliance is a future/later-phase product capability and is explicitly outside the initial MVP.
+
+The product should eventually allow organizations to configure compliance requirements and administer evidence without organization-specific code.
+
+The conceptual flow is:
+
+**Contractor/External Resource → Configurable Requirements → Evidence → Evaluation → Configurable Operational Rule → Assignment/Scheduling/Work Consequence**
+
+The model must distinguish:
+
+- Compliance Requirement
+- Compliance Evidence
+- Compliance Evaluation
+
+It must not collapse compliance into a single Boolean contractor status.
+
+Future configurable compliance domains include:
+
+- Licenses and credentials
+- Insurance policies
+- Qualifications and certifications
+- Contracts and agreements
+- Supporting documents
+- Verification information
+- Expiration and renewal information
+
+Future operational consequences may be configured to:
+
+- Prevent assignment
+- Prevent scheduling
+- Prevent activation/work authorization
+- Prevent payment
+- Restrict particular services
+- Require administrative approval
+- Allow assignment with warning
+
+Organizations should eventually be able to configure expiration thresholds and resulting notifications/escalations, such as a 60-day warning followed by a 30-day escalation.
+
+Authorized administrators should eventually be able to apply controlled overrides that record the requirement, contractor/resource, reason, authorizer, effective date, expiration date, scope, and audit record.
+
+Shared documents should eventually be associable with contractors, contracts, licenses/credentials, insurance policies, and qualifications.
+
+The capability must inherit the platform's organization/tenant isolation, permission, privacy, and audit requirements.
+
+**Scope boundary:** full contractor licensing/insurance/compliance tracking remains out of scope for the initial MVP. This section is architectural preservation only and must not be converted into an MVP implementation item.

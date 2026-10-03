@@ -91,8 +91,8 @@ class FieldVisitService {
     const appointment = this.#getAppointment(principal.organizationId, input.appointmentId);
     if (!appointment) throw new Error("Appointment not found");
     if (appointment.workOrderId !== input.workOrderId) throw new Error("Appointment is not linked to the requested work order");
-    const workOrder = this.workOrderService.getForOrganization({
-      organizationId: principal.organizationId, jobId: undefined, workOrderId: input.workOrderId
+    const workOrder = await this.workOrderService.getForOrganization({
+      organizationId: principal.organizationId, jobId: undefined, workOrderId: input.workOrderId, db
     });
     if (!workOrder) throw new Error("Work order not found");
     const resourceIds = input.resourceIds === undefined ? appointment.memberIds : input.resourceIds;

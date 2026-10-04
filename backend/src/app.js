@@ -34,7 +34,9 @@ const { withTransaction } = require("./database");
 const MAX_BODY_BYTES = 1024 * 1024;
 const FRONTEND_FILES = {
   "/": { file: "index.html", contentType: "text/html; charset=utf-8" },
-  "/app.js": { file: "app.js", contentType: "text/javascript; charset=utf-8" }
+  "/app.js": { file: "app.js", contentType: "text/javascript; charset=utf-8" },
+  "/auth.js": { file: "auth.js", contentType: "text/javascript; charset=utf-8" },
+  "/appShell.js": { file: "appShell.js", contentType: "text/javascript; charset=utf-8" }
 };
 const FRONTEND_DIR = path.resolve(__dirname, "../../frontend/src");
 
@@ -402,6 +404,17 @@ function createHandler(state, {
           throw error;
         }
         p = authenticationService.authenticateAuthorizationHeader(req.headers.authorization);
+      }
+
+      if (req.method === "GET" && path === "/api/auth/me") {
+        return json(res, 200, {
+          userId: p.userId,
+          organizationId: p.organizationId,
+          permissions: p.permissions,
+          authenticatedAt: p.authenticatedAt?.toISOString?.() || null,
+          expiresAt: p.expiresAt?.toISOString?.() || null,
+          authMethod: p.authMethod || "bearer"
+        });
       }
 
       if (req.method === "GET" && path === "/api/jobs") {

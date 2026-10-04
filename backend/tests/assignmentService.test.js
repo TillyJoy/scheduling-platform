@@ -124,3 +124,9 @@ assert.throws(() => configurableStatusService.create({
   startTime: "2026-10-01T14:45:00Z",
   endTime: "2026-10-01T15:45:00Z"
 }), /overlapping assignment/);
+
+
+assert.throws(
+  () => new AssignmentService({ assignmentRepository: {} }),
+  /assignmentRepository requires transaction, resourceRepository, jobRepository, and workOrderRepository/
+);

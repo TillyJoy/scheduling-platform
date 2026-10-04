@@ -22,11 +22,13 @@ const { ResourceQualificationRepository } = require("./repositories/resourceQual
 const { AvailabilityRepository } = require("./repositories/availabilityRepository");
 const { AppointmentRepository } = require("./repositories/appointmentRepository");
 const { SchedulingHoldRepository } = require("./repositories/schedulingHoldRepository");
+const { AssignmentRepository } = require("./repositories/assignmentRepository");
 const { ResourceService } = require("./services/resourceService");
 const { QualificationService } = require("./services/qualificationService");
 const { ResourceQualificationService } = require("./services/resourceQualificationService");
 const { AvailabilityService } = require("./services/availabilityService");
 const { StatusConfigurationService } = require("./services/statusConfigurationService");
+const { AssignmentService } = require("./services/assignmentService");
 const { withTransaction } = require("./database");
 
 const MAX_BODY_BYTES = 1024 * 1024;
@@ -88,6 +90,7 @@ function createAppState(seed = {}) {
   const availabilityRepository = databasePool ? new AvailabilityRepository({ pool: databasePool }) : null;
   const appointmentRepository = databasePool ? new AppointmentRepository({ pool: databasePool }) : null;
   const schedulingHoldRepository = databasePool ? new SchedulingHoldRepository({ pool: databasePool }) : null;
+  const assignmentRepository = databasePool ? new AssignmentRepository({ pool: databasePool }) : null;
   const resourceStore = new Map(resources.map(resource => [JSON.stringify([resource.organizationId || "demo-org", resource.id]), resource]));
   const qualificationStore = new Map();
   const resourceQualificationStore = new Map();
@@ -113,6 +116,24 @@ function createAppState(seed = {}) {
     availabilityRepository,
     resourceRepository,
     transaction
+  });
+  const assignmentStatusResolver = ({ organizationId, entityType, statusCode }) => {
+    if (!organizationId || !entityType || !statusCode) return null;
+    return statusConfigurationService.statusStore.get(
+      [organizationId, entityType, statusCode].join(":")
+    ) || null;
+  };
+  const assignmentService = new AssignmentService({
+    assignmentStore: new Map(assignments.map(assignment => [
+      JSON.stringify([assignment.organizationId || "demo-org", assignment.id]),
+      assignment
+    ])),
+    assignmentRepository,
+    resourceRepository,
+    jobRepository,
+    workOrderRepository,
+    transaction,
+    statusResolver: assignmentStatusResolver
   });
   const fieldVisitRepository = databasePool ? new FieldVisitRepository({ pool: databasePool }) : null;
   const actualWorkRepository = databasePool ? new ActualWorkRepository({ pool: databasePool }) : null;
@@ -202,6 +223,8 @@ function createAppState(seed = {}) {
     qualificationService,
     resourceQualificationService,
     availabilityService,
+    assignmentService,
+    assignmentStatusResolver,
     fieldVisitService,
     actualWorkService,
     fieldExecutionSyncService,

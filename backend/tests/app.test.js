@@ -339,6 +339,43 @@ test("application exposes jobs, availability, and appointment conflict protectio
   }
 });
 
+test("authenticated scheduler can list and create work orders for the selected job", async () => {
+  const { server, token } = authenticatedServer([
+    "job:read",
+    "workOrder:create",
+    "workOrder:read"
+  ]);
+  await new Promise(resolve => server.listen(0, resolve));
+  const auth = { Authorization: `Bearer ${token}` };
+  try {
+    const jobs = await request(server, "GET", "/api/jobs", null, auth);
+    assert.equal(jobs.status, 200);
+    assert.equal(jobs.body[0].id, "job-1");
+    assert.equal(jobs.body[0].clientId, "client-1");
+    assert.equal(jobs.body[0].metadata.propertyId, "property-1");
+
+    const initial = await request(server, "GET", "/api/work-orders?jobId=job-1", null, auth);
+    assert.equal(initial.status, 200);
+    assert.deepEqual(initial.body, []);
+
+    const created = await request(server, "POST", "/api/work-orders", {
+      id: "wo-browser-1",
+      jobId: "job-1",
+      title: "Browser scheduling work order"
+    }, auth);
+    assert.equal(created.status, 201);
+    assert.equal(created.body.jobId, "job-1");
+    assert.equal(created.body.number, "WO-1");
+
+    const listed = await request(server, "GET", "/api/work-orders?jobId=job-1", null, auth);
+    assert.equal(listed.status, 200);
+    assert.equal(listed.body.length, 1);
+    assert.equal(listed.body[0].id, "wo-browser-1");
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
 test("application serves the scheduler shell and frontend asset", async () => {
   const server = http.createServer(createHandler(createAppState(), { allowDevelopmentBypass: false }));
   await new Promise(resolve => server.listen(0, resolve));

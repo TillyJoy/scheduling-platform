@@ -64,7 +64,8 @@ function createAppState(seed = {}) {
     title: "Demo Client — 123 Main St",
     clientId: "client-1",
     serviceIds: ["AMP", "WX"],
-    statusCode: "ready_to_schedule"
+    statusCode: "ready_to_schedule",
+    metadata: { propertyId: "property-1" }
   })];
 
   const appointmentStore = new Map(
@@ -267,9 +268,10 @@ async function ensureDurableDemoData(state) {
       principal: demoPrincipal,
       id: "job-1",
       title: "Demo Client — 123 Main St",
-      clientId: null,
+      clientId: "client-1",
       serviceIds: ["AMP", "WX"],
-      statusCode: "ready_to_schedule"
+      statusCode: "ready_to_schedule",
+      metadata: { propertyId: "property-1" }
     });
   }
 }
@@ -419,6 +421,27 @@ function createHandler(state, {
 
       if (req.method === "GET" && path === "/api/jobs") {
         return json(res, 200, await state.jobService.list({ principal: p }));
+      }
+      if (req.method === "GET" && path === "/api/work-orders") {
+        return json(res, 200, await state.workOrderService.list({
+          principal: p,
+          jobId: url.searchParams.get("jobId")
+        }));
+      }
+      if (req.method === "POST" && path === "/api/work-orders") {
+        const input = await readBody(req);
+        if (!input || typeof input !== "object" || Array.isArray(input)) {
+          return json(res, 400, { error: "Request body must be a JSON object" });
+        }
+        if (input.organizationId && input.organizationId !== p.organizationId) {
+          return json(res, 403, { error: "Not authorized for the requested organization" });
+        }
+        const workOrder = await state.workOrderService.create({
+          ...input,
+          principal: p,
+          organizationId: p.organizationId
+        });
+        return json(res, 201, workOrder);
       }
       if (req.method === "GET" && path === "/api/resources") {
         return json(res, 200, state.resources.filter(resource => resource.active !== false));

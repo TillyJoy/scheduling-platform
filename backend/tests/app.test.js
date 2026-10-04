@@ -58,6 +58,30 @@ function authenticatedServer(permissions = ["job:read", "appointment:create", "a
   return { server, token };
 }
 
+test("authenticated principal context is trusted and client organization headers cannot override it", async () => {
+  const { server, token } = authenticatedServer();
+  await new Promise(resolve => server.listen(0, resolve));
+  try {
+    const context = await request(server, "GET", "/api/auth/me", null, {
+      Authorization: `Bearer ${token}`,
+      "X-Organization-Id": "attacker-org"
+    });
+    assert.equal(context.status, 200);
+    assert.equal(context.body.userId, "demo-user");
+    assert.equal(context.body.organizationId, "demo-org");
+    assert.deepEqual(context.body.permissions, ["job:read", "appointment:create", "appointment:read"]);
+
+    const jobs = await request(server, "GET", "/api/jobs", null, {
+      Authorization: `Bearer ${token}`,
+      "X-Organization-Id": "attacker-org"
+    });
+    assert.equal(jobs.status, 200);
+    assert.equal(jobs.body[0].organizationId, "demo-org");
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
 test("protected API routes require authentication", async () => {
   const { server, token } = authenticatedServer();
   await new Promise(resolve => server.listen(0, resolve));

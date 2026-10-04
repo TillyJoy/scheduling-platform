@@ -37,3 +37,14 @@ test("development login failure remains visible in the unauthenticated shell",as
   assert.equal(button.disabled,true);
   assert.equal(root.innerHTML,"Development authentication failed");
 });
+
+
+test("scheduler uses selected jobs and work orders instead of hard-coded appointment context", () => {
+  const source = fs.readFileSync("src/app.js", "utf8");
+  assert.match(source, /\/api\/work-orders\?jobId=/);
+  assert.match(source, /workOrderId/);
+  assert.match(source, /selectedJob\.clientId/);
+  assert.match(source, /selectedJob\.metadata\?\.propertyId/);
+  assert.doesNotMatch(source, /clientId:"client-1"/);
+  assert.doesNotMatch(source, /propertyId:"property-1"/);
+});

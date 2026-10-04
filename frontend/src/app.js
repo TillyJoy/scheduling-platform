@@ -13,7 +13,7 @@ function dateWindow(dateValue) { const day=new Date(`${dateValue}T00:00:00Z`); r
 async function load(dateValue = new Date().toISOString().slice(0,10)) {
   const workspace=document.getElementById("workspace");
   if(!workspace) return;
-  workspace.innerHTML="<section class="panel"><p>Loading scheduler…</p></section>";
+  workspace.innerHTML='<section class="panel"><p>Loading scheduler…</p></section>';
   try {
     const window=dateWindow(dateValue);
     const [jobs,resources,appointments,slots]=await Promise.all([
@@ -57,7 +57,7 @@ function bindUnauthenticated(message) {
   document.getElementById("development-login")?.addEventListener("click",async event=>{
     event.currentTarget.disabled=true;
     try { const session=await SchedulingAuth.developmentLogin(); if(!session) throw new Error("Authentication did not establish a valid session."); SchedulingAppShell.renderAuthenticated(root,session); document.getElementById("logout")?.addEventListener("click",()=>{SchedulingAuth.logout();bindUnauthenticated("You have been signed out.");}); await load(); }
-    catch(error){ SchedulingAppShell.renderUnauthenticated(root,error.message); bindUnauthenticated(); }
+    catch(error){ bindUnauthenticated(error.message); }
   });
 }
 boot();

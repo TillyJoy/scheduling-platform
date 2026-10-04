@@ -59,6 +59,10 @@ jobs:
           RUN_POSTGRES_TESTS: 1
         run: node --test tests/fieldVisitService.test.js tests/fieldExecutionSyncService.test.js tests/fieldExecutionSyncApi.test.js tests/fieldExecutionPostgres.integration.test.js
 
+      - name: Run frontend tests
+        working-directory: frontend
+        run: npm test
+
       - name: Build frontend
         working-directory: frontend
         run: npm run build

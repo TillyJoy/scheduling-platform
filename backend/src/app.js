@@ -64,7 +64,8 @@ function createAppState(seed = {}) {
     title: "Demo Client — 123 Main St",
     clientId: "client-1",
     serviceIds: ["AMP", "WX"],
-    statusCode: "ready_to_schedule"
+    statusCode: "ready_to_schedule",
+    metadata: { propertyId: "property-1" }
   })];
 
   const appointmentStore = new Map(

@@ -268,9 +268,10 @@ async function ensureDurableDemoData(state) {
       principal: demoPrincipal,
       id: "job-1",
       title: "Demo Client — 123 Main St",
-      clientId: null,
+      clientId: "client-1",
       serviceIds: ["AMP", "WX"],
-      statusCode: "ready_to_schedule"
+      statusCode: "ready_to_schedule",
+      metadata: { propertyId: "property-1" }
     });
   }
 }

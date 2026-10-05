@@ -635,3 +635,155 @@ Survey capability should remain domain-neutral. Organizations may configure surv
 
 This capability should eventually support both operational follow-up and reporting/analytics while preserving the distinction between survey response data and derived reports.
 
+## Customer Survey / Feedback — Future Configurable Platform Capability
+
+Customer Survey / Feedback is a distinct, configurable, industry-neutral platform capability. It is separate from Intake Forms, Jobs, Work Orders, Appointments, Field Visits, Services, Resources, Notifications, and Reporting records. Survey responses are their own domain information associated with relevant operational context.
+
+This is a future architecture capability, not an MVP implementation requirement.
+
+### Conceptual Lifecycle
+
+**Work Completed → Survey Invitation → Survey Landing Page → Response → Survey Results → Reporting / Analytics**
+
+This lifecycle is conceptual architecture only and does not imply that survey runtime functionality currently exists.
+
+### Survey Definition
+
+A Survey Definition is organization-configurable. Established configuration includes:
+
+- Questions
+- Question types
+- Required versus optional questions
+- Ratings
+- Comments / free text
+- Branding
+- Expiration
+- Triggering conditions
+- Invitation timing
+- Follow-up behavior
+- Privacy / anonymity configuration
+
+### Survey Invitation and Response Boundaries
+
+Survey Invitation and Survey Response are distinct records.
+
+Survey invitations must reuse the existing Notifications & Communications architecture for delivery. Survey-specific invitation behavior remains future implementation; no second notification system is introduced.
+
+A Survey Response is distinct from:
+
+- Survey Definition
+- Survey Invitation
+- Job
+- Work Order
+- Appointment
+- Field Visit
+- Service
+- Resource
+- Operational reporting records
+
+Responses may contain the configured questions and answers, ratings, comments, and other configured response information.
+
+### Operational Relationships
+
+A survey or response may be associated, as configured and appropriate, with:
+
+- Organization
+- Person / customer
+- Job
+- Work Order
+- Appointment
+- Service
+- Resource / contractor
+
+No relationship is made mandatory by this architecture unless established by a later authoritative survey design.
+
+### Anonymous and Identified Responses
+
+The platform must support configurable anonymous versus identified survey responses.
+
+Where a survey is configured as anonymous, configured anonymity must be preserved through:
+
+- Operational relationships
+- Metadata
+- Reporting
+- Drill-down
+- Filters
+- Exports
+- Derived analytics
+
+The technical mechanism for preserving anonymity is intentionally not established by this architecture transfer and remains a future implementation/design question.
+
+### Privacy, Permissions, and Tenant Isolation
+
+Survey capability must reuse existing platform foundations for:
+
+- Tenant isolation
+- Permissions
+- Authorization
+- Audit
+- Privacy controls
+
+Survey architecture must not duplicate these foundations.
+
+### Reporting and Analytics
+
+Survey responses/results remain distinct from operational records and reporting records.
+
+Survey reporting may include, where permitted:
+
+- Response rates
+- Ratings
+- Comments
+- Completion
+- Trends
+- Service-related results
+- Appointment / work-order-related results
+- Resource / contractor-related results
+
+Reporting must respect configured anonymity, permissions, tenant boundaries, and privacy.
+
+The existing **Customer Survey Reporting** material in `app/REPORTING.md` is part of this architecture and is not duplicated here.
+
+### Survey Landing Page
+
+The architecture includes a Survey Landing Page as part of the conceptual lifecycle. The exact public/authenticated access mechanism is intentionally open and is not established by this transfer.
+
+### Deferred / Not Established
+
+This transfer does not decide or implement:
+
+- Database schema
+- API design
+- Frontend implementation
+- Public authentication/access mechanism
+- Duplicate-response rules
+- Response editing
+- Partial or draft submissions
+- Scoring methodology
+- Attachments
+- Detailed retention/deletion rules
+- Exact anonymity implementation
+- Survey runtime services
+- Survey notification automation implementation
+
+### Architectural Boundaries
+
+The following distinctions are authoritative:
+
+- **Survey Definition ≠ Survey Invitation**
+- **Survey Invitation ≠ Survey Response**
+- **Survey Response ≠ Reporting Record**
+- **Survey ≠ Intake Form**
+- **Survey ≠ Operational Work**
+- **Survey ≠ Notification**
+
+Existing configurable platform foundations must be reused wherever applicable.
+
+### Provenance and Governance
+
+This architecture was transferred from the Customer Survey / Feedback workstream after its archival-safety review determined that the substantive architecture was not fully represented in the authoritative repository records.
+
+Historical PR #22 contains related documentation but remains an open, unmerged historical artifact. It is not the authoritative implementation source for this capability after this transfer.
+
+No runtime implementation, database schema, API, UI, public submission mechanism, scoring engine, or survey service is implied by this architecture record.
+

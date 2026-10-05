@@ -82,6 +82,43 @@ test("authenticated principal context is trusted and client organization headers
   }
 });
 
+test("resource API uses trusted organization and resource permission boundaries", async () => {
+  const authenticationService = new AuthenticationService({ secret: AUTH_SECRET });
+  const state = createAppState({
+    resources: [
+      { id: "resource-demo", organizationId: "demo-org", active: true },
+      { id: "resource-other", organizationId: "other-org", active: true }
+    ],
+    authenticationService
+  });
+  const server = http.createServer(createHandler(state, { allowDevelopmentBypass: false }));
+  await new Promise(resolve => server.listen(0, resolve));
+  try {
+    const token = authenticationService.issueToken({
+      userId: "resource-reader",
+      organizationId: "demo-org",
+      permissions: ["resource:read"]
+    });
+    const response = await request(server, "GET", "/api/resources", null, {
+      Authorization: `Bearer ${token}`
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(response.body.map(resource => resource.id), ["resource-demo"]);
+
+    const forbiddenToken = authenticationService.issueToken({
+      userId: "job-reader",
+      organizationId: "demo-org",
+      permissions: ["job:read"]
+    });
+    const forbidden = await request(server, "GET", "/api/resources", null, {
+      Authorization: `Bearer ${forbiddenToken}`
+    });
+    assert.equal(forbidden.status, 403);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
 test("protected API routes require authentication", async () => {
   const { server, token } = authenticatedServer();
   await new Promise(resolve => server.listen(0, resolve));

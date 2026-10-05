@@ -444,7 +444,7 @@ function createHandler(state, {
         return json(res, 201, workOrder);
       }
       if (req.method === "GET" && path === "/api/resources") {
-        return json(res, 200, state.resources.filter(resource => resource.active !== false));
+        return json(res, 200, (await state.resourceService.list({ principal: p })).filter(resource => resource.active !== false));
       }
       if (req.method === "GET" && path === "/api/appointments") {
         return json(res, 200, state.appointmentService.list({ principal: p }).map(appointment => ({

@@ -48,7 +48,6 @@ class NotificationEventProcessor {
     return this.#processAsync(args);
   }
 
-  async #processAsync({principal,event}={}) {
   async #processAsync({principal,event}={}) {    if(!event?.id||!event.organizationId||!event.eventType)throw new Error("Domain event is required");
     if(event.organizationId!==principal.organizationId)throw new Error("Not authorized");
     this.#authorize(principal,principal.organizationId);

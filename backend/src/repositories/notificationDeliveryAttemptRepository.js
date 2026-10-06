@@ -50,7 +50,6 @@ class NotificationDeliveryAttemptRepository {
     this.#requirePrincipal(principal);
     if (!Number.isInteger(limit) || limit < 1) throw new Error("limit must be a positive integer");
     if (!Number.isInteger(leaseMs) || leaseMs < 1) throw new Error("leaseMs must be a positive integer");
-
     const lockUntil = new Date(now.getTime() + leaseMs);
     const result = await db.query(
       `WITH candidates AS (
@@ -89,24 +88,31 @@ class NotificationDeliveryAttemptRepository {
     return result.rows.map(row => this.#map(row));
   }
 
-  async scheduleRetry({ principal, deliveryAttemptId, availableAt, errorCode = null, errorMessage = null, db = this.pool }) {
+  async createRetry({ principal, failedAttemptId, availableAt, errorCode = null, errorMessage = null, metadata = {}, db = this.pool }) {
     this.#requirePrincipal(principal);
     if (!(availableAt instanceof Date) || Number.isNaN(availableAt.getTime())) throw new Error("availableAt must be a valid Date");
-    const current = await this.get({ principal, deliveryAttemptId, db });
+    const current = await this.get({ principal, deliveryAttemptId: failedAttemptId, db });
     if (!current) throw new Error("Delivery attempt not found");
     if (current.status !== "failed") throw new Error("Only failed delivery attempts can be retried");
     if (current.attemptNumber >= current.maxAttempts) throw new Error("Delivery attempt retries are exhausted");
 
-    const result = await db.query(
-      `UPDATE notification_delivery_attempts
-       SET status='pending', available_at=$3, locked_at=NULL,
-           error_code=$4, error_message=$5, failed_at=NULL, updated_at=$6
-       WHERE organization_id=$1 AND id=$2 AND status='failed'
-       RETURNING *`,
-      [principal.organizationId, deliveryAttemptId, availableAt, errorCode, errorMessage, this.clock()]
-    );
-    if (!result.rows[0]) throw new Error("Delivery attempt is no longer retryable");
-    return this.#map(result.rows[0]);
+    return this.create({
+      principal,
+      attempt: {
+        id: current.notificationId + ":" + current.channel + ":" + (current.attemptNumber + 1),
+        notificationId: current.notificationId,
+        channel: current.channel,
+        provider: current.provider,
+        status: "pending",
+        attemptNumber: current.attemptNumber + 1,
+        idempotencyKey: current.notificationId + ":" + current.channel + ":attempt:" + (current.attemptNumber + 1),
+        requestedAt: this.clock(),
+        availableAt,
+        maxAttempts: current.maxAttempts,
+        metadata: { ...metadata, retryOf: current.id, errorCode, errorMessage }
+      },
+      db
+    });
   }
 
   async updateStatus({ principal, deliveryAttemptId, status, fields = {}, db = this.pool }) {

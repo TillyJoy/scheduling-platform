@@ -110,7 +110,7 @@ class ActualWorkService {
       }, createdAt: occurredAt
     }));
     if (this.domainEventService) {
-      this.domainEventService.emit({
+      await this.domainEventService.emit({
         principal, id: crypto.randomUUID(), eventType: "actual_work.recorded",
         entityType: "actual_work", entityId: work.id, occurredAt,
         payload: {

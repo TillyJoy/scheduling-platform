@@ -30,6 +30,8 @@ test("durable Notifications / Domain Events / Outbox are tenant-safe, replay-saf
   const notificationRepo=new NotificationRepository({pool});
   const deliveryRepo=new NotificationDeliveryAttemptRepository({pool});
   const notificationService=new NotificationService({notificationRepository:notificationRepo,transaction});
+  const {DomainEventService}=require("../src/services/domainEventService");
+  const domainEventService=new DomainEventService({eventRepository:eventRepo,outboxRepository:outboxRepo,transaction});
 
   t.after(async()=>{
     for(const org of [orgA,orgB]) await transaction({userId:"cleanup",organizationId:org,permissions},"test.cleanup",async db=>{
@@ -39,7 +41,7 @@ test("durable Notifications / Domain Events / Outbox are tenant-safe, replay-saf
       await db.query("DELETE FROM domain_events WHERE organization_id=$1",[org]);
     }).catch(()=>{});
     try{
-      await pool.query("DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname=$1) THEN EXECUTE 'DROP OWNED BY ""'||$1||'""'; END IF; END $$;",[role]).catch(()=>{});
+      await pool.query('DROP ROLE IF EXISTS "'+role+'"').catch(()=>{});
     }finally{await pool.end();}
   });
 
@@ -51,8 +53,8 @@ test("durable Notifications / Domain Events / Outbox are tenant-safe, replay-saf
 
   const event=new DomainEvent({id:"event-1-"+suffix,organizationId:orgA,eventType:"job.status.changed",entityType:"job",entityId:"job-1",actorUserId:principalA.userId,
     payload:{previousStatus:"new",newStatus:"ready"},source:"application",correlationId:"corr-"+suffix,causationId:"cause-"+suffix});
-  await transaction(principalA,"event.emit",db=>eventRepo.create({principal:principalA,event,db}));
-  await transaction(principalA,"outbox.enqueue",db=>outboxRepo.enqueue({principal:principalA,event,db}));
+  await domainEventService.emit({principal:principalA,id:event.id,eventType:event.eventType,entityType:event.entityType,entityId:event.entityId,
+    payload:event.payload,source:event.source,occurredAt:event.occurredAt,correlationId:event.correlationId,causationId:event.causationId});
 
   const freshEventRepo=new DomainEventRepository({pool});
   const freshOutboxRepo=new DomainEventOutboxRepository({pool});
@@ -94,6 +96,10 @@ test("durable Notifications / Domain Events / Outbox are tenant-safe, replay-saf
   ]));
   assert.deepEqual(isolated.map(x=>x.rows),[[],[],[],[]]);
 
+  await assert.rejects(
+    ()=>domainEventService.emit({principal:principalB,id:event.id,eventType:event.eventType,entityType:event.entityType,entityId:event.entityId,payload:event.payload}),
+    /already exists|organization|Not authorized/i
+  );
   await assert.rejects(
     ()=>transaction(principalA,"notification.cross-tenant",db=>notificationRepo.create({principal:principalA,notification:new Notification({id:"cross-"+suffix,organizationId:orgB,recipientId:principalB.userId,title:"Cross",message:"x"}),db})),
     /organization mismatch|violates row-level security/i

@@ -31,6 +31,7 @@ test("durable Resource / Qualification / Availability persistence is tenant-safe
   ];
   const principalA = { userId: `user-a-${suffix}`, organizationId: orgA, permissions };
   const principalB = { userId: `user-b-${suffix}`, organizationId: orgB, permissions };
+  const readOnlyPrincipal = { userId: `read-only-${suffix}`, organizationId: orgA, permissions: ["resource:read"] };
 
   const transaction = (principal, action, work) =>
     withTransaction(pool, { organizationId: principal.organizationId, userId: principal.userId, action }, async db => {
@@ -96,6 +97,10 @@ test("durable Resource / Qualification / Availability persistence is tenant-safe
   assert.equal(resourceA.id, resourceB.id);
   assert.equal(resourceB.organizationId, orgB);
   assert.equal((await resourceService.list({ principal: principalA })).length, 1);
+  await assert.rejects(
+    () => resourceService.create({ principal: readOnlyPrincipal, id: "resource-forbidden", name: "Forbidden Resource" }),
+    /Not authorized/
+  );
 
   const updatedResource = await resourceService.update({
     principal: principalA, id: "resource-1", name: "Resource One Updated", resourceType: "person",
@@ -215,6 +220,38 @@ test("durable Resource / Qualification / Availability persistence is tenant-safe
   assert.equal((await resourceQualificationService.list({ principal: principalA })).length, 1);
   assert.equal((await availabilityService.list({ principal: principalA, resourceId: "resource-1" })).length, 1);
 
+  const secondResourceService = new ResourceService({
+    resourceRepository: new ResourceRepository({ pool }),
+    transaction
+  });
+  const secondQualificationService = new QualificationService({
+    qualificationRepository: new QualificationRepository({ pool }),
+    transaction
+  });
+  const secondResourceQualificationService = new ResourceQualificationService({
+    resourceQualificationRepository: new ResourceQualificationRepository({ pool }),
+    resourceRepository: new ResourceRepository({ pool }),
+    qualificationRepository: new QualificationRepository({ pool }),
+    transaction
+  });
+  const secondAvailabilityService = new AvailabilityService({
+    availabilityRepository: new AvailabilityRepository({ pool }),
+    resourceRepository: new ResourceRepository({ pool }),
+    transaction
+  });
+
+  const persistedResource = await secondResourceService.get({ principal: principalA, resourceId: "resource-1" });
+  const persistedQualification = await secondQualificationService.get({ principal: principalA, qualificationId: "qualification-1" });
+  const persistedResourceQualification = await secondResourceQualificationService.get({ principal: principalA, resourceQualificationId: "rq-1" });
+  const persistedAvailability = await secondAvailabilityService.get({ principal: principalA, availabilityId: "availability-1" });
+
+  assert.equal(persistedResource.name, "Resource One Updated");
+  assert.equal(persistedQualification.name, "Certification Updated");
+  assert.equal(persistedResourceQualification.statusCode, "active");
+  assert.equal(persistedResourceQualification.expirationAt.toISOString(), "2027-06-01T00:00:00.000Z");
+  assert.equal(persistedAvailability.available, false);
+  assert.equal(persistedAvailability.zoneId, "zone-b");
+
   const isolated = await transaction(principalB, "test.isolation", async db => {
     const resources = await db.query("SELECT id FROM resources ORDER BY id");
     const qualifications = await db.query("SELECT qualification_id FROM qualifications ORDER BY qualification_id");
@@ -235,8 +272,21 @@ test("durable Resource / Qualification / Availability persistence is tenant-safe
   assert.ok(actions.includes("resource.updated"));
   assert.ok(actions.includes("qualification.created"));
   assert.ok(actions.includes("resource-qualification.created"));
+  assert.ok(actions.includes("resource-qualification.updated"));
   assert.ok(actions.includes("availability.created"));
   assert.ok(audit.rows.every(row => ["resource", "qualification", "resource_qualification", "availability"].includes(row.entity_type)));
+
+  const qualificationAudit = await transaction(principalA, "test.qualification-history", db =>
+    db.query(
+      "SELECT action, previous_value, new_value FROM audit_events WHERE organization_id=$1 AND entity_type='resource_qualification' AND entity_id=$2 ORDER BY created_at, id",
+      [orgA, "rq-1"]
+    )
+  );
+  assert.equal(qualificationAudit.rows.length, 2);
+  assert.equal(qualificationAudit.rows[0].previous_value, null);
+  assert.equal(qualificationAudit.rows[0].new_value.statusCode, "pending_review");
+  assert.equal(qualificationAudit.rows[1].previous_value.statusCode, "pending_review");
+  assert.equal(qualificationAudit.rows[1].new_value.statusCode, "active");
 
   const countsBeforeRollback = await transaction(principalA, "test.rollback-count", async db => {
     const resources = await db.query("SELECT count(*)::int AS count FROM resources WHERE organization_id=$1", [orgA]);

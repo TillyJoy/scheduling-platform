@@ -107,6 +107,7 @@ test("durable notification delivery worker processes events, retries safely, and
   assert.equal(attempts.rows.length,1);
   assert.equal(attempts.rows[0].status,"delivered");
   assert.equal(attempts.rows[0].attempt_number,1);
+  assert.equal(attempts.rows[0].status,"delivered");
 
   const retryAttempt=await tx(principalA,"delivery.retry-fixture",db=>deliveryRepo.create({
     principal:principalA,

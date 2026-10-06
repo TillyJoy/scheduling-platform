@@ -67,7 +67,7 @@ class NotificationDeliveryWorker {
     if (stale.length) this.logger.warn?.("Recovered stale notification event leases", { organizationId, count: stale.length });
 
     const claimed = await this.transaction(principal, "notification.worker.claim-events", db =>
-      this.outboxRepository.claimBatch({ principal, limit: this.batchSize, now, leaseMs: this.leaseMs, db })
+      this.outboxRepository.claimBatch({ principal, limit: this.batchSize, now, leaseMs: this.leaseMs, maxAttempts: this.maxAttempts, db })
     );
 
     const results = [];

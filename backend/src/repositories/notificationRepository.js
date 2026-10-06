@@ -53,8 +53,10 @@ class NotificationRepository {
     else if(status==="acknowledged") setClause="status='acknowledged',acknowledged_at=$3";
     else if(status==="dismissed") setClause="status='dismissed',dismissed_at=$3";
     else throw new Error("Invalid notification status transition");
+    const values = [principal.organizationId, notificationId];
+    if (status !== "read") values.push(stamp);
     const result=await db.query(`UPDATE notifications SET ${setClause} WHERE organization_id=$1 AND id=$2 RETURNING *`,
-      [principal.organizationId,notificationId,stamp]);
+      values);
     return this.#map(result.rows[0]);
   }
 

@@ -19,7 +19,7 @@ class StatusLifecycleService {
     this.authorize = authorize;
   }
 
-  transition({
+  async transition({
     principal,
     entityType,
     entityId,
@@ -50,7 +50,7 @@ class StatusLifecycleService {
     const previousStatus = record.status;
 
     if (this.domainEventService) {
-      this.domainEventService.emit({
+      await this.domainEventService.emit({
         principal,
         id: crypto.randomUUID(),
         eventType: eventType || entityType + ".status.changed",

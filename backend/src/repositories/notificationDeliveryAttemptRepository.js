@@ -9,10 +9,7 @@ class NotificationDeliveryAttemptRepository {
 
   async create({ principal, attempt, db = this.pool }) {
     this.#requirePrincipal(principal);
-    const record = new NotificationDeliveryAttempt({
-      ...attempt,
-      organizationId: principal.organizationId
-    });
+    const record = new NotificationDeliveryAttempt({ ...attempt, organizationId: principal.organizationId });
     const result = await db.query(
       `INSERT INTO notification_delivery_attempts
        (id,organization_id,notification_id,channel,provider,status,attempt_number,idempotency_key,
@@ -24,8 +21,8 @@ class NotificationDeliveryAttemptRepository {
         record.id, principal.organizationId, record.notificationId, record.channel, record.provider,
         record.status, record.attemptNumber, record.idempotencyKey, record.errorCode, record.errorMessage,
         record.providerMessageId, record.requestedAt, record.sentAt, record.deliveredAt, record.failedAt,
-        record.suppressedAt, record.expiredAt, JSON.stringify(record.metadata), attempt.availableAt ?? record.requestedAt,
-        attempt.lockedAt ?? null, attempt.maxAttempts ?? 3, this.clock()
+        record.suppressedAt, record.expiredAt, JSON.stringify(record.metadata), record.availableAt,
+        record.lockedAt, record.maxAttempts, this.clock()
       ]
     );
     return this.#map(result.rows[0]);
@@ -60,11 +57,9 @@ class NotificationDeliveryAttemptRepository {
         SELECT id
         FROM notification_delivery_attempts
         WHERE organization_id=$1
-          AND (
-            (status='pending' AND available_at <= $2 AND (locked_at IS NULL OR locked_at <= $2))
-            OR
-            (status='pending' AND locked_at <= $2)
-          )
+          AND status='pending'
+          AND available_at <= $2
+          AND (locked_at IS NULL OR locked_at <= $2)
         ORDER BY available_at,id
         FOR UPDATE SKIP LOCKED
         LIMIT $3
@@ -114,19 +109,6 @@ class NotificationDeliveryAttemptRepository {
     return this.#map(result.rows[0]);
   }
 
-  async createNextAttempt({ principal, attempt, db = this.pool }) {
-    return this.create({
-      principal,
-      attempt: {
-        ...attempt,
-        attemptNumber: attempt.attemptNumber ?? 1,
-        maxAttempts: attempt.maxAttempts ?? 3,
-        availableAt: attempt.availableAt ?? this.clock()
-      },
-      db
-    });
-  }
-
   async updateStatus({ principal, deliveryAttemptId, status, fields = {}, db = this.pool }) {
     this.#requirePrincipal(principal);
     if (!STATUSES.includes(status)) throw new Error("Invalid delivery attempt status");
@@ -147,10 +129,10 @@ class NotificationDeliveryAttemptRepository {
 
     const now = this.clock();
     const result = await db.query(
-      `UPDATE notification_delivery_attempts
-       SET status=$3,error_code=$4,error_message=$5,provider_message_id=$6,
-           sent_at=$7,delivered_at=$8,failed_at=$9,suppressed_at=$10,expired_at=$11,
-           metadata=$12::jsonb,available_at=$13,locked_at=$14,updated_at=$15
+      `UPDATE notification_delivery_attempts SET
+         status=$3,error_code=$4,error_message=$5,provider_message_id=$6,
+         sent_at=$7,delivered_at=$8,failed_at=$9,suppressed_at=$10,expired_at=$11,
+         metadata=$12::jsonb,available_at=$13,locked_at=$14,updated_at=$15
        WHERE organization_id=$1 AND id=$2 RETURNING *`,
       [
         principal.organizationId, deliveryAttemptId, status,
@@ -190,7 +172,10 @@ class NotificationDeliveryAttemptRepository {
       failedAt: row.failed_at,
       suppressedAt: row.suppressed_at,
       expiredAt: row.expired_at,
-      metadata: row.metadata
+      metadata: row.metadata,
+      availableAt: row.available_at,
+      lockedAt: row.locked_at,
+      maxAttempts: row.max_attempts
     });
   }
 

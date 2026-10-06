@@ -13,7 +13,7 @@ class NotificationRepository {
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17::jsonb,$18,$19,$20,$21,$22,$23) RETURNING *`,
       [record.id,principal.organizationId,record.recipientId,record.severity,record.title,record.message,record.type,record.icon,record.color,
        record.relatedEntityType,record.relatedEntityId,record.sourceEventId,record.sourceEventType,record.deliveryKey,record.templateId,record.templateVersion,
-       JSON.stringify(record.metadata),record.status,record.requiresAcknowledgement,record.createdAt,record.acknowledgedAt,record.dismissedAt,record.expiresAt]
+       JSON.stringify(record.metadata ?? {}),record.status,record.requiresAcknowledgement,record.createdAt,record.acknowledgedAt,record.dismissedAt,record.expiresAt]
     );
     return this.#map(result.rows[0]);
   }

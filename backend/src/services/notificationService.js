@@ -33,7 +33,7 @@ class NotificationService {
   createWithResult({ principal, ...input }) {
     return this.notificationRepository
       ? this.#durableCreate({ principal, ...input })
-      : Promise.resolve(this.#memoryCreateWithResult({ principal, ...input }));
+      : this.#memoryCreateWithResult({ principal, ...input });
   }
 
   listForRecipient(args = {}) {

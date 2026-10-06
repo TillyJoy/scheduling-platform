@@ -89,7 +89,7 @@ test("durable notification delivery worker processes events, retries safely, and
       actorUserId:principalA.userId,payload:{newStatus:"ready",recipientUserId:principalA.userId}
     });
     await eventRepo.create({principal:principalA,event,db});
-    await outboxRepo.enqueue({principal:principalA,event,db});
+    await outboxRepo.enqueue({principal:principalA,event,availableAt:fixedNow,db});
   });
 
   const first=await worker.processOrganization(orgA);

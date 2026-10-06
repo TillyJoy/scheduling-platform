@@ -2,10 +2,9 @@ const assert=require("node:assert/strict");
 const test=require("node:test");
 const {randomUUID}=require("node:crypto");
 const {createDatabasePool,runMigrations,withTransaction}=require("../src/database");
-const {Notification}=require("../src/models/notification");
+const {DomainEvent}=require("../src/models/domainEvent");
 const {NotificationRule}=require("../src/models/notificationRule");
 const {NotificationTemplate}=require("../src/models/notificationTemplate");
-const {DomainEvent}=require("../src/models/domainEvent");
 const {DomainEventRepository}=require("../src/repositories/domainEventRepository");
 const {DomainEventOutboxRepository}=require("../src/repositories/domainEventOutboxRepository");
 const {NotificationRepository}=require("../src/repositories/notificationRepository");
@@ -46,31 +45,22 @@ test("durable notification delivery worker processes events, retries safely, and
   providers.register("email","fake",{
     async send(request){
       calls.push(request);
-      if(calls.length===1) return {status:"failure",failureClass:"retryable",errorCode:"TEMPORARY",errorMessage:"temporary provider failure"};
-      return {status:"success",providerMessageId:"provider-"+calls.length};
+      if(calls.length===1)return{status:"failure",failureClass:"retryable",errorCode:"TEMPORARY",errorMessage:"temporary provider failure"};
+      return{status:"success",providerMessageId:"provider-"+calls.length};
     }
   });
 
   const fixedNow=new Date("2026-10-06T12:00:00.000Z");
   let now=fixedNow;
   const worker=new NotificationDeliveryWorker({
-    transaction:tx,
-    outboxRepository:outboxRepo,
-    eventRepository:eventRepo,
-    notificationEventProcessor:processor,
-    notificationRepository:notificationRepo,
-    deliveryAttemptRepository:deliveryRepo,
-    providerRegistry:providers.providers,
-    principalFactory:workerPrincipal,
-    now:()=>now,
-    batchSize:10,
-    leaseMs:60000,
-    maxAttempts:3,
-    backoff:()=>1000
+    transaction:tx,outboxRepository:outboxRepo,eventRepository:eventRepo,
+    notificationEventProcessor:processor,notificationRepository:notificationRepo,
+    deliveryAttemptRepository:deliveryRepo,providerRegistry:providers.providers,
+    principalFactory:workerPrincipal,now:()=>now,batchSize:10,leaseMs:60000,maxAttempts:3,backoff:()=>1000
   });
 
   t.after(async()=>{
-    for(const org of [orgA,orgB]) await tx({userId:"cleanup",organizationId:org},"test.cleanup",async db=>{
+    for(const org of [orgA,orgB])await tx({userId:"cleanup",organizationId:org},"test.cleanup",async db=>{
       await db.query("DELETE FROM notification_delivery_attempts WHERE organization_id=$1",[org]);
       await db.query("DELETE FROM notifications WHERE organization_id=$1",[org]);
       await db.query("DELETE FROM event_outbox WHERE organization_id=$1",[org]);
@@ -88,22 +78,23 @@ test("durable notification delivery worker processes events, retries safely, and
   await pool.query('GRANT SELECT,INSERT,UPDATE,DELETE ON organizations,audit_events,domain_events,event_outbox,notifications,notification_delivery_attempts TO "'+role+'"');
 
   const template=new NotificationTemplate({
-    id:"template-worker-"+suffix,organizationId:orgA,name:"Email Status",
-    channel:"email",subject:"{{newStatus}}",body:"Job {{entityId}} is {{newStatus}}.",
-    variables:["entityId","newStatus"],status:"published"
+    id:"template-worker-"+suffix,organizationId:orgA,name:"Email Status",channel:"email",
+    subject:"{{newStatus}}",body:"Job {{entityId}} is {{newStatus}}.",variables:["entityId","newStatus"],status:"published"
   });
   const rule=new NotificationRule({
-    id:"rule-worker-"+suffix,organizationId:orgA,name:"Email status",
-    eventType:"job.status.changed",recipientRules:[{type:"event_payload",path:"recipientUserId"}],
-    templateIds:[template.id],allowedChannels:["email"],status:"published",enabled:true
+    id:"rule-worker-"+suffix,organizationId:orgA,name:"Email status",eventType:"job.status.changed",
+    recipientRules:[{type:"event_payload",path:"recipientUserId"}],templateIds:[template.id],
+    allowedChannels:["email"],status:"published",enabled:true
   });
   templates.set(template.id,template);
   processorRules.set(rule.id,rule);
 
   const eventId="event-worker-"+suffix;
   await tx(principalA,"event.emit",async db=>{
-    const event=new DomainEvent({id:eventId,organizationId:orgA,eventType:"job.status.changed",entityType:"job",entityId:"job-1",
-      actorUserId:principalA.userId,payload:{newStatus:"ready",recipientUserId:principalA.userId}});
+    const event=new DomainEvent({
+      id:eventId,organizationId:orgA,eventType:"job.status.changed",entityType:"job",entityId:"job-1",
+      actorUserId:principalA.userId,payload:{newStatus:"ready",recipientUserId:principalA.userId}
+    });
     await eventRepo.create({principal:principalA,event,db});
     await outboxRepo.enqueue({principal:principalA,event,db});
   });
@@ -111,20 +102,28 @@ test("durable notification delivery worker processes events, retries safely, and
   const first=await worker.processOrganization(orgA);
   assert.equal(first.length,1);
   assert.equal(first[0].status,"published");
-  const notifications=await tx(principalA,"notification.read",db=>db.query("SELECT id,organization_id,delivery_key FROM notifications WHERE organization_id=$1",[orgA]));
+
+  const notifications=await tx(principalA,"notification.read",db=>db.query(
+    "SELECT id,organization_id,delivery_key FROM notifications WHERE organization_id=$1",[orgA]
+  ));
   assert.equal(notifications.rows.length,1);
-  const attempts=await tx(principalA,"delivery.read",db=>db.query("SELECT id,status,attempt_number,available_at,locked_at,max_attempts FROM notification_delivery_attempts WHERE organization_id=$1 ORDER BY attempt_number",[orgA]));
+
+  const attempts=await tx(principalA,"delivery.read",db=>db.query(
+    "SELECT id,status,attempt_number,available_at,locked_at,max_attempts FROM notification_delivery_attempts WHERE organization_id=$1 ORDER BY attempt_number",[orgA]
+  ));
   assert.equal(attempts.rows.length,1);
   assert.equal(attempts.rows[0].status,"pending");
   assert.equal(attempts.rows[0].attempt_number,1);
   assert.equal(attempts.rows[0].locked_at,null);
 
-  const retryTickBefore=await worker.processDeliveryAttempts(orgA);
-  assert.equal(retryTickBefore.length,1);
-  assert.equal(retryTickBefore[0].status,"retry_scheduled");
-  const afterFailure=await tx(principalA,"delivery.read",db=>db.query("SELECT status,attempt_number,available_at,locked_at FROM notification_delivery_attempts WHERE organization_id=$1 ORDER BY attempt_number",[orgA]));
-  assert.equal(afterFailure.rows[0].status,"failed");
-  assert.equal(afterFailure.rows[0].attempt_number,1);
+  const firstDelivery=await worker.processDeliveryAttempts(orgA);
+  assert.equal(firstDelivery.length,1);
+  assert.equal(firstDelivery[0].status,"retry_scheduled");
+
+  const afterFailure=await tx(principalA,"delivery.read",db=>db.query(
+    "SELECT status,attempt_number,available_at,locked_at FROM notification_delivery_attempts WHERE organization_id=$1 ORDER BY attempt_number",[orgA]
+  ));
+  assert.deepEqual(afterFailure.rows.map(r=>[r.status,r.attempt_number]),[["failed",1]]);
   assert.equal(afterFailure.rows[0].locked_at,null);
   assert.equal(new Date(afterFailure.rows[0].available_at).getTime(),fixedNow.getTime()+1000);
 
@@ -132,15 +131,30 @@ test("durable notification delivery worker processes events, retries safely, and
   const second=await worker.processDeliveryAttempts(orgA);
   assert.equal(second.length,1);
   assert.equal(second[0].status,"delivered");
-  const attemptsAfterSuccess=await tx(principalA,"delivery.read",db=>db.query("SELECT status,attempt_number FROM notification_delivery_attempts WHERE organization_id=$1 ORDER BY attempt_number",[orgA]));
+
+  const attemptsAfterSuccess=await tx(principalA,"delivery.read",db=>db.query(
+    "SELECT status,attempt_number FROM notification_delivery_attempts WHERE organization_id=$1 ORDER BY attempt_number",[orgA]
+  ));
   assert.deepEqual(attemptsAfterSuccess.rows.map(r=>[r.status,r.attempt_number]),[["failed",1],["delivered",2]]);
   assert.equal(calls.length,2);
 
-  now=new Date(fixedNow.getTime()+70000);
-  const stale=await tx(principalA,"delivery.stale",db=>deliveryRepo.create({principal:principalA,attempt:{
-    id:"stale-"+suffix,notificationId:notifications.rows[0].id,channel:"email",provider:"fake",
-    status:"pending",attemptNumber:1,idempotencyKey:"stale-key-"+suffix,availableAt:now,lockedAt:new Date(now.getTime()-1),maxAttempts:3
-  },db}));
+  const active=await tx(principalA,"delivery.active",db=>deliveryRepo.create({
+    principal:principalA,attempt:{
+      id:"active-"+suffix,notificationId:notifications.rows[0].id,channel:"email",provider:"fake",
+      status:"pending",attemptNumber:1,idempotencyKey:"active-key-"+suffix,availableAt:now,maxAttempts:3
+    },db
+  }));
+  const claimedA=await tx(principalA,"delivery.claim-a",db=>deliveryRepo.claimBatch({principal:principalA,limit:1,now,leaseMs:60000,db}));
+  assert.deepEqual(claimedA.map(a=>a.id),[active.id]);
+  const claimedB=await tx(principalA,"delivery.claim-b",db=>deliveryRepo.claimBatch({principal:principalA,limit:1,now,leaseMs:60000,db}));
+  assert.deepEqual(claimedB.map(a=>a.id),[]);
+
+  const stale=await tx(principalA,"delivery.stale",db=>deliveryRepo.create({
+    principal:principalA,attempt:{
+      id:"stale-"+suffix,notificationId:notifications.rows[0].id,channel:"email",provider:"fake",
+      status:"pending",attemptNumber:1,idempotencyKey:"stale-key-"+suffix,availableAt:now,lockedAt:new Date(now.getTime()-1),maxAttempts:3
+    },db
+  }));
   const recovered=await tx(principalA,"delivery.recover",db=>deliveryRepo.recoverStale({principal:principalA,now:new Date(now.getTime()+1),db}));
   assert.ok(recovered.some(a=>a.id===stale.id));
   const staleRow=await tx(principalA,"delivery.stale.read",db=>deliveryRepo.get({principal:principalA,deliveryAttemptId:stale.id,db}));
@@ -153,11 +167,11 @@ test("durable notification delivery worker processes events, retries safely, and
   ]));
   assert.deepEqual(isolated.map(r=>r.rows),[[],[],[]]);
 
+  const crossTenant=await tx(principalB,"cross-tenant",db=>deliveryRepo.get({principal:principalB,deliveryAttemptId:active.id,db}));
+  assert.equal(crossTenant,null);
+
   await assert.rejects(
-    ()=>tx(principalB,"cross-tenant",db=>deliveryRepo.get({principal:principalB,deliveryAttemptId:stale.id,db})).then(x=>{
-      if(x) throw new Error("cross-tenant visibility");
-      return x;
-    }),
-    /|$/
+    ()=>worker.processOrganization(""),
+    /organizationId/
   );
 });

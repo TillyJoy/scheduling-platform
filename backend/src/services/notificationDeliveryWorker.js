@@ -61,14 +61,10 @@ class NotificationDeliveryWorker {
     const principal = this.principalFactory(organizationId);
     const now = this.now();
 
-    await this.transaction(principal, "notification.worker.claim-events", async db => {
-      const stale = await this.outboxRepository.recoverStale({ principal, now, leaseMs: this.leaseMs, db });
-      if (stale.length) this.logger.warn?.("Recovered stale notification event leases", { organizationId, count: stale.length });
-    }).catch(async error => {
-      // Older outbox repositories do not implement stale recovery; event claiming remains safe
-      // because no stale-lease recovery is needed until the outbox migration provides it.
-      if (!/recoverStale/.test(error.message || "")) throw error;
-    });
+    const stale = await this.transaction(principal, "notification.worker.recover-events", db =>
+      this.outboxRepository.recoverStale({ principal, now, db })
+    );
+    if (stale.length) this.logger.warn?.("Recovered stale notification event leases", { organizationId, count: stale.length });
 
     const claimed = await this.transaction(principal, "notification.worker.claim-events", db =>
       this.outboxRepository.claimBatch({ principal, limit: this.batchSize, now, leaseMs: this.leaseMs, db })
@@ -268,19 +264,21 @@ class NotificationDeliveryWorker {
 
     const delayMs = Math.max(0, Number(this.backoff(attempt.attemptNumber)) || 0);
     const availableAt = new Date(this.now().getTime() + delayMs);
-    await this.transaction(principal, "notification.delivery.retry", db =>
-      this.deliveryAttemptRepository.scheduleRetry({
+    const retry = await this.transaction(principal, "notification.delivery.retry", db =>
+      this.deliveryAttemptRepository.createRetry({
         principal,
-        deliveryAttemptId: attempt.id,
+        failedAttemptId: attempt.id,
         availableAt,
         errorCode,
         errorMessage,
+        metadata: { failureClass },
         db
       })
     );
 
     return {
       deliveryAttemptId: attempt.id,
+      retryAttemptId: retry.id,
       status: "retry_scheduled",
       availableAt
     };
@@ -290,24 +288,21 @@ class NotificationDeliveryWorker {
     const attemptNumber = entry.attempts || 1;
     const failureClass = error.failureClass || FAILURE_CLASSES.RETRYABLE;
     const errorMessage = error.message || "Notification processing failed";
-
-    const availableAt = failureClass === FAILURE_CLASSES.RETRYABLE && attemptNumber < this.maxAttempts
-      ? new Date(this.now().getTime() + Math.max(0, Number(this.backoff(attemptNumber)) || 0))
-      : this.now();
+    const retryable = failureClass === FAILURE_CLASSES.RETRYABLE && attemptNumber < this.maxAttempts;
 
     await this.transaction(principal, "notification.worker.event-failed", db =>
       this.outboxRepository.markFailed({
         principal,
         outboxId: entry.id,
         error: errorMessage,
-        availableAt,
+        availableAt: retryable
+          ? new Date(this.now().getTime() + Math.max(0, Number(this.backoff(attemptNumber)) || 0))
+          : this.now(),
         db
       })
     );
 
-    return failureClass === FAILURE_CLASSES.RETRYABLE && attemptNumber < this.maxAttempts
-      ? "retry_scheduled"
-      : "failed";
+    return retryable ? "retry_scheduled" : "failed";
   }
 
   #classifiedError(failureClass, message) {

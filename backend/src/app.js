@@ -10,6 +10,9 @@ const { WorkOrderService } = require("./services/workOrderService");
 const { FieldVisitService } = require("./services/fieldVisitService");
 const { ActualWorkService } = require("./services/actualWorkService");
 const { DomainEventService } = require("./services/domainEventService");
+const { DomainEventOutboxService } = require("./services/domainEventOutboxService");
+const { NotificationService } = require("./services/notificationService");
+const { NotificationEventProcessor } = require("./services/notificationEventProcessor");
 const { FieldExecutionSyncService } = require("./services/fieldExecutionSyncService");
 const { FieldVisitRepository } = require("./repositories/fieldVisitRepository");
 const { ActualWorkRepository } = require("./repositories/actualWorkRepository");
@@ -29,6 +32,10 @@ const { ResourceQualificationService } = require("./services/resourceQualificati
 const { AvailabilityService } = require("./services/availabilityService");
 const { StatusConfigurationService } = require("./services/statusConfigurationService");
 const { AssignmentService } = require("./services/assignmentService");
+const { DomainEventRepository } = require("./repositories/domainEventRepository");
+const { DomainEventOutboxRepository } = require("./repositories/domainEventOutboxRepository");
+const { NotificationRepository } = require("./repositories/notificationRepository");
+const { NotificationDeliveryAttemptRepository } = require("./repositories/notificationDeliveryAttemptRepository");
 const { withTransaction } = require("./database");
 
 const MAX_BODY_BYTES = 1024 * 1024;
@@ -76,7 +83,6 @@ function createAppState(seed = {}) {
   );
   const jobStore = new Map(jobs.map(job => [JSON.stringify([job.organizationId, job.id]), job]));
   const workOrderStore = new Map(workOrders.map(order => [JSON.stringify([order.organizationId, order.id]), order]));
-  const domainEventService = new DomainEventService({ eventStore: domainEvents, auditStore: auditEvents });
   const databasePool = seed.databasePool || null;
   const statusConfigurationService = seed.statusConfigurationService || new StatusConfigurationService({
     statusStore: seed.statusStore || new Map(),
@@ -85,6 +91,32 @@ function createAppState(seed = {}) {
   const transaction = databasePool
     ? (principal, action, work) => withTransaction(databasePool, { organizationId: principal.organizationId, userId: principal.userId, action }, work)
     : null;
+  const domainEventRepository = databasePool ? new DomainEventRepository({ pool: databasePool }) : null;
+  const domainEventOutboxRepository = databasePool ? new DomainEventOutboxRepository({ pool: databasePool }) : null;
+  const notificationRepository = databasePool ? new NotificationRepository({ pool: databasePool }) : null;
+  const notificationDeliveryAttemptRepository = databasePool ? new NotificationDeliveryAttemptRepository({ pool: databasePool }) : null;
+  const domainEventService = new DomainEventService({
+    eventStore: domainEvents,
+    auditStore: auditEvents,
+    eventRepository: domainEventRepository,
+    outboxRepository: domainEventOutboxRepository,
+    transaction
+  });
+  const domainEventOutboxService = new DomainEventOutboxService({
+    outboxStore: [],
+    auditStore: auditEvents,
+    outboxRepository: domainEventOutboxRepository,
+    transaction
+  });
+  const notificationService = new NotificationService({
+    notificationRepository,
+    transaction,
+    auditStore: auditEvents
+  });
+  const notificationEventProcessor = new NotificationEventProcessor({
+    notificationService,
+    deliveryAttemptRepository: notificationDeliveryAttemptRepository
+  });
   const jobRepository = databasePool ? new JobRepository({ pool: databasePool }) : null;
   const workOrderRepository = databasePool ? new WorkOrderRepository({ pool: databasePool }) : null;
   const resourceRepository = databasePool ? new ResourceRepository({ pool: databasePool }) : null;
@@ -232,6 +264,9 @@ function createAppState(seed = {}) {
     actualWorkService,
     fieldExecutionSyncService,
     domainEventService,
+    domainEventOutboxService,
+    notificationService,
+    notificationEventProcessor,
     demoAvailability,
     schedulingService,
     statusConfigurationService,

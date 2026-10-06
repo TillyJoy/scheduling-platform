@@ -250,7 +250,7 @@ class FieldVisitService {
 
   #emit(principal, eventType, visit, occurredAt = this.clock()) {
     if (!this.domainEventService) return;
-    this.domainEventService.emit({
+    await this.domainEventService.emit({
       principal, id: crypto.randomUUID(), eventType, entityType: "field_visit",
       entityId: visit.id, occurredAt,
       payload: {

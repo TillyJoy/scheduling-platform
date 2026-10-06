@@ -2,8 +2,8 @@ const crypto=require("node:crypto");
 const {DomainEventOutboxEntry}=require("../models/domainEventOutboxEntry");
 class DomainEventOutboxRepository {
   constructor({pool,clock=()=>new Date()}={}){if(!pool)throw new Error("pool is required");this.pool=pool;this.clock=clock;}
-  async enqueue({principal,event,id=crypto.randomUUID(),availableAt=null,db=this.pool}) {
-    this.#requirePrincipal(principal);if(!event?.id||!event.organizationId)throw new Error("Domain event is required");if(event.organizationId!==principal.organizationId)throw new Error("Not authorized");
+  async enqueue({principal,event,id=null,availableAt=null,db=this.pool}) {
+    this.#requirePrincipal(principal);if(!event?.id||!event.organizationId)throw new Error("Domain event is required");id=id||crypto.randomUUID();if(event.organizationId!==principal.organizationId)throw new Error("Not authorized");
     const result=await db.query(`INSERT INTO event_outbox
       (id,organization_id,event_id,event_type,entity_type,entity_id,payload,source,occurred_at,status,attempts,available_at)
       VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,'pending',0,$10) RETURNING *`,

@@ -98,7 +98,7 @@ test("durable Notifications / Domain Events / Outbox are tenant-safe, replay-saf
 
   await assert.rejects(
     ()=>domainEventService.emit({principal:principalB,id:event.id,eventType:event.eventType,entityType:event.entityType,entityId:event.entityId,payload:event.payload}),
-    /already exists|organization|Not authorized|duplicate key/i
+    /already exists|organization|Not authorized|duplicate key|unique constraint/i
   );
   await assert.rejects(
     ()=>transaction(principalA,"notification.cross-tenant",db=>notificationRepo.create({principal:principalA,notification:new Notification({id:"cross-"+suffix,organizationId:orgB,recipientId:principalB.userId,title:"Cross",message:"x"}),db})),

@@ -126,7 +126,6 @@ function createAppState(seed = {}) {
     eventRepository: domainEventRepository,
     notificationEventProcessor,
     notificationProviderRegistry,
-    notificationDeliveryWorker,
     notificationRepository,
     deliveryAttemptRepository: notificationDeliveryAttemptRepository,
     providerRegistry: notificationProviderRegistry.providers

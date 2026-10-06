@@ -1,5 +1,6 @@
 const crypto=require("node:crypto");
 const {DomainEventOutboxEntry}=require("../models/domainEventOutboxEntry");
+const {AuditEvent}=require("../models/auditEvent");
 
 const ACTIONS=Object.freeze({ENQUEUE:"event:emit",DISPATCH:"event:dispatch"});
 
@@ -31,7 +32,13 @@ class DomainEventOutboxService {
     this.#authorize(principal,ACTIONS.ENQUEUE,principal.organizationId);
     if(this.outboxStore.some(e=>e.eventId===event.id||e.id===id))throw new Error("Domain event or outbox entry is already queued");
     const entry=new DomainEventOutboxEntry({id,organizationId:principal.organizationId,eventId:event.id,eventType:event.eventType,entityType:event.entityType,entityId:event.entityId,
-      payload:event.payload,source:event.source,occurredAt:event.occurredAt,availableAt});this.outboxStore.push(entry);return entry;
+      payload:event.payload,source:event.source,occurredAt:event.occurredAt,availableAt});this.outboxStore.push(entry);
+    this.auditStore.push(new AuditEvent({
+      id:"domain-event-outbox-enqueued:"+entry.id,organizationId:entry.organizationId,userId:principal.userId,
+      action:"domain-event.outbox.enqueued",entityType:entry.entityType,entityId:entry.entityId,
+      newValue:{outboxId:entry.id,eventId:entry.eventId,eventType:entry.eventType}
+    }));
+    return entry;
   }
   #memoryClaim({principal,limit,now}) {
     this.#requirePrincipal(principal);this.#authorize(principal,ACTIONS.DISPATCH,principal.organizationId);if(!Number.isInteger(limit)||limit<1)throw new Error("limit must be a positive integer");

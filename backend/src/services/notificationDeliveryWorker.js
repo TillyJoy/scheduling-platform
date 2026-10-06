@@ -8,12 +8,11 @@ const FAILURE_CLASSES = Object.freeze({
 
 class NotificationDeliveryWorker {
   constructor({
-    pool = null,
     transaction,
     outboxRepository,
-    outboxService,
     eventRepository,
     notificationEventProcessor,
+    notificationRepository,
     deliveryAttemptRepository,
     providerRegistry = {},
     principalFactory = organizationId => ({
@@ -29,7 +28,7 @@ class NotificationDeliveryWorker {
     maxAttempts = 3,
     backoff = attemptNumber => Math.min(30000, 1000 * (2 ** Math.max(0, attemptNumber - 1)))
   } = {}) {
-    if (!transaction || !outboxRepository || !outboxService || !eventRepository || !notificationEventProcessor || !deliveryAttemptRepository) {
+    if (!transaction || !outboxRepository || !eventRepository || !notificationEventProcessor || !notificationRepository || !deliveryAttemptRepository) {
       throw new Error("worker persistence services are required");
     }
     if (!Number.isInteger(batchSize) || batchSize < 1) throw new Error("batchSize must be a positive integer");
@@ -38,12 +37,11 @@ class NotificationDeliveryWorker {
     if (!Number.isInteger(maxAttempts) || maxAttempts < 1) throw new Error("maxAttempts must be a positive integer");
     if (typeof backoff !== "function") throw new Error("backoff must be a function");
 
-    this.pool = pool;
     this.transaction = transaction;
     this.outboxRepository = outboxRepository;
-    this.outboxService = outboxService;
     this.eventRepository = eventRepository;
     this.notificationEventProcessor = notificationEventProcessor;
+    this.notificationRepository = notificationRepository;
     this.deliveryAttemptRepository = deliveryAttemptRepository;
     this.providerRegistry = providerRegistry;
     this.principalFactory = principalFactory;
@@ -63,12 +61,17 @@ class NotificationDeliveryWorker {
     const principal = this.principalFactory(organizationId);
     const now = this.now();
 
-    await this.transaction(principal, "notification.worker.recover", db =>
-      this.deliveryAttemptRepository.recoverStale({ principal, now, db })
-    );
+    await this.transaction(principal, "notification.worker.claim-events", async db => {
+      const stale = await this.outboxRepository.recoverStale({ principal, now, leaseMs: this.leaseMs, db });
+      if (stale.length) this.logger.warn?.("Recovered stale notification event leases", { organizationId, count: stale.length });
+    }).catch(async error => {
+      // Older outbox repositories do not implement stale recovery; event claiming remains safe
+      // because no stale-lease recovery is needed until the outbox migration provides it.
+      if (!/recoverStale/.test(error.message || "")) throw error;
+    });
 
     const claimed = await this.transaction(principal, "notification.worker.claim-events", db =>
-      this.outboxRepository.claimBatch({ principal, limit: this.batchSize, now, db })
+      this.outboxRepository.claimBatch({ principal, limit: this.batchSize, now, leaseMs: this.leaseMs, db })
     );
 
     const results = [];
@@ -77,9 +80,10 @@ class NotificationDeliveryWorker {
         const event = await this.transaction(principal, "notification.worker.event-read", db =>
           this.eventRepository.get({ principal, eventId: entry.eventId, db })
         );
-        if (!event) throw this.#classifiedError("permanent", "Domain event not found");
+        if (!event) throw this.#classifiedError(FAILURE_CLASSES.PERMANENT, "Domain event not found");
 
         const processed = await this.notificationEventProcessor.process({ principal, event });
+
         await this.transaction(principal, "notification.worker.publish-event", db =>
           this.outboxRepository.markPublished({
             principal,
@@ -88,10 +92,13 @@ class NotificationDeliveryWorker {
             db
           })
         );
+
         results.push({ outboxId: entry.id, status: "published", processed });
       } catch (error) {
-        const outcome = await this.#handleEventFailure(principal, entry, error);
-        results.push({ outboxId: entry.id, status: outcome });
+        results.push({
+          outboxId: entry.id,
+          status: await this.#handleEventFailure(principal, entry, error)
+        });
       }
     }
     return results;
@@ -101,9 +108,12 @@ class NotificationDeliveryWorker {
     if (!organizationId) throw new Error("organizationId is required");
     const principal = this.principalFactory(organizationId);
     const now = this.now();
-    await this.transaction(principal, "notification.worker.recover-delivery", db =>
+
+    const stale = await this.transaction(principal, "notification.worker.recover-delivery", db =>
       this.deliveryAttemptRepository.recoverStale({ principal, now, db })
     );
+    if (stale.length) this.logger.warn?.("Recovered stale notification delivery leases", { organizationId, count: stale.length });
+
     const claimed = await this.transaction(principal, "notification.worker.claim-delivery", db =>
       this.deliveryAttemptRepository.claimBatch({
         principal,
@@ -113,6 +123,7 @@ class NotificationDeliveryWorker {
         db
       })
     );
+
     const results = [];
     for (const attempt of claimed) {
       results.push(await this.#deliverAttempt(principal, attempt));
@@ -158,22 +169,20 @@ class NotificationDeliveryWorker {
   async #deliverAttempt(principal, attempt) {
     const provider = this.providerRegistry[attempt.channel]?.[attempt.provider || "default"];
     if (!provider || typeof provider.send !== "function") {
-      return this.#failDelivery(principal, attempt, "permanent", "DELIVERY_PROVIDER_UNAVAILABLE", "No configured delivery provider");
+      return this.#failDelivery(principal, attempt, FAILURE_CLASSES.PERMANENT, "DELIVERY_PROVIDER_UNAVAILABLE", "No configured delivery provider");
+    }
+
+    const notification = await this.transaction(principal, "notification.worker.notification-read", db =>
+      this.notificationRepository.get({ principal, notificationId: attempt.notificationId, db })
+    );
+    if (!notification) {
+      return this.#failDelivery(principal, attempt, FAILURE_CLASSES.PERMANENT, "NOTIFICATION_NOT_FOUND", "Notification not found");
     }
 
     try {
-      const notification = await this.transaction(principal, "notification.worker.notification-read", db =>
-        this.notificationEventProcessor.notificationService?.notificationRepository
-          ? this.notificationEventProcessor.notificationService.notificationRepository.get({ principal, notificationId: attempt.notificationId, db })
-          : null
-      );
-      if (!notification) {
-        return this.#failDelivery(principal, attempt, "permanent", "NOTIFICATION_NOT_FOUND", "Notification not found");
-      }
-
       const result = await provider.send({
         id: randomUUID(),
-        organizationId: attempt.organizationId,
+        organizationId: notification.organizationId,
         notificationId: notification.id,
         deliveryAttemptId: attempt.id,
         channel: attempt.channel,
@@ -190,7 +199,11 @@ class NotificationDeliveryWorker {
             principal,
             deliveryAttemptId: attempt.id,
             status: "suppressed",
-            fields: { errorCode: result.errorCode || "SUPPRESSED", errorMessage: result.errorMessage || null, metadata: result.metadata || {} },
+            fields: {
+              errorCode: result.errorCode || "SUPPRESSED",
+              errorMessage: result.errorMessage || null,
+              metadata: result.metadata || {}
+            },
             db
           })
         );
@@ -198,31 +211,38 @@ class NotificationDeliveryWorker {
       }
 
       if (result?.status !== "success") {
-        const failureClass = result?.failureClass || FAILURE_CLASSES.PERMANENT;
-        return this.#failDelivery(principal, attempt, failureClass, result?.errorCode, result?.errorMessage, result?.metadata);
+        return this.#failDelivery(
+          principal,
+          attempt,
+          result?.failureClass || FAILURE_CLASSES.PERMANENT,
+          result?.errorCode || "PROVIDER_REJECTED",
+          result?.errorMessage || "Provider rejected delivery",
+          result?.metadata || {}
+        );
       }
 
-      await this.transaction(principal, "notification.delivery.sent", db =>
-        this.deliveryAttemptRepository.updateStatus({
-          principal,
-          deliveryAttemptId: attempt.id,
-          status: "sent",
-          fields: { providerMessageId: result.providerMessageId || null, metadata: result.metadata || {} },
-          db
-        })
-      );
       await this.transaction(principal, "notification.delivery.delivered", db =>
         this.deliveryAttemptRepository.updateStatus({
           principal,
           deliveryAttemptId: attempt.id,
           status: "delivered",
-          fields: { providerMessageId: result.providerMessageId || null, metadata: result.metadata || {} },
+          fields: {
+            providerMessageId: result.providerMessageId || null,
+            metadata: result.metadata || {}
+          },
           db
         })
       );
+
       return { deliveryAttemptId: attempt.id, status: "delivered" };
     } catch (error) {
-      return this.#failDelivery(principal, attempt, "retryable", "PROVIDER_ERROR", error.message);
+      return this.#failDelivery(
+        principal,
+        attempt,
+        FAILURE_CLASSES.RETRYABLE,
+        "PROVIDER_ERROR",
+        error.message || "Provider error"
+      );
     }
   }
 
@@ -258,6 +278,7 @@ class NotificationDeliveryWorker {
         db
       })
     );
+
     return {
       deliveryAttemptId: attempt.id,
       status: "retry_scheduled",
@@ -270,24 +291,23 @@ class NotificationDeliveryWorker {
     const failureClass = error.failureClass || FAILURE_CLASSES.RETRYABLE;
     const errorMessage = error.message || "Notification processing failed";
 
-    if (failureClass !== FAILURE_CLASSES.RETRYABLE || attemptNumber >= this.maxAttempts) {
-      await this.transaction(principal, "notification.worker.event-failed", db =>
-        this.outboxRepository.markFailed({ principal, outboxId: entry.id, error: errorMessage, availableAt: this.now(), db })
-      );
-      return "failed";
-    }
+    const availableAt = failureClass === FAILURE_CLASSES.RETRYABLE && attemptNumber < this.maxAttempts
+      ? new Date(this.now().getTime() + Math.max(0, Number(this.backoff(attemptNumber)) || 0))
+      : this.now();
 
-    const delayMs = Math.max(0, Number(this.backoff(attemptNumber)) || 0);
-    await this.transaction(principal, "notification.worker.event-retry", db =>
+    await this.transaction(principal, "notification.worker.event-failed", db =>
       this.outboxRepository.markFailed({
         principal,
         outboxId: entry.id,
         error: errorMessage,
-        availableAt: new Date(this.now().getTime() + delayMs),
+        availableAt,
         db
       })
     );
-    return "retry_scheduled";
+
+    return failureClass === FAILURE_CLASSES.RETRYABLE && attemptNumber < this.maxAttempts
+      ? "retry_scheduled"
+      : "failed";
   }
 
   #classifiedError(failureClass, message) {

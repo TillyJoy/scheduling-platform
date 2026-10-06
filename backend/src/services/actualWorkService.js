@@ -98,7 +98,7 @@ class ActualWorkService {
     return this.#clone(work);
   }
 
-  #record(principal, work, occurredAt) {
+  async #record(principal, work, occurredAt) {
     this.auditStore.push(new AuditEvent({
       id: "actual-work.created:" + work.id + ":" + (this.auditStore.length + 1),
       organizationId: principal.organizationId, userId: principal.userId,

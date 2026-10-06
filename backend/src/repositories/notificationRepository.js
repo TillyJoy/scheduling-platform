@@ -5,6 +5,7 @@ class NotificationRepository {
 
   async create({ principal, notification, db=this.pool }) {
     this.#requirePrincipal(principal);
+    if (notification.organizationId && notification.organizationId !== principal.organizationId) throw new Error("Notification organization mismatch");
     const record=new Notification({...notification,organizationId:principal.organizationId});
     const result=await db.query(
       `INSERT INTO notifications

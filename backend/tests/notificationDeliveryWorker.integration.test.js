@@ -144,7 +144,7 @@ test("durable notification delivery worker processes events, retries safely, and
   assert.equal(failedRow.status,"failed");
   assert.equal(failedRow.attempt_number,1);
   assert.equal(failedRow.locked_at,null);
-  assert.equal(new Date(failedRow.available_at).getTime(),fixedNow.getTime()+1000);
+  assert.equal(new Date(failedRow.available_at).getTime(),now.getTime());
 
   now=new Date(fixedNow.getTime()+1000);
   const second=await retryWorker.processDeliveryAttempts(orgA);

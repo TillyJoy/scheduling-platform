@@ -17,8 +17,7 @@ class NotificationEventProcessor {
     if(!event?.id||!event.organizationId||!event.eventType)throw new Error("Domain event is required");
     if(event.organizationId!==principal.organizationId)throw new Error("Not authorized");
     this.#authorize(principal,principal.organizationId);
-    const rules=[...this.ruleStore.values()].filter(r=>r.organizationId===event.organizationId).filter(r=>r.eventType===event.eventType)
-      .filter(r=>r.status==="published"&&r.enabled).filter(r=>this.#matchesConditions(r.conditions,event));
+    const rules=[...this.ruleStore.values()].filter(r=>r.organizationId===event.organizationId).filter(r=>r.eventType===event.eventType).filter(r=>r.status==="published"&&r.enabled).filter(r=>this.#matchesConditions(r.conditions,event));
     const results=[];
     for(const rule of rules){
       const recipients=this.#resolveRecipients(rule,event);
@@ -44,28 +43,21 @@ class NotificationEventProcessor {
     return results;
   }
 
-  #processDurable(args={}) {
-    return this.#processAsync(args);
-  }
-
-  async #processAsync({principal,event}={}) {    if(!event?.id||!event.organizationId||!event.eventType)throw new Error("Domain event is required");
+  async #processAsync({principal,event}={}) {
+    this.#requirePrincipal(principal);
+    if(!event?.id||!event.organizationId||!event.eventType)throw new Error("Domain event is required");
     if(event.organizationId!==principal.organizationId)throw new Error("Not authorized");
     this.#authorize(principal,principal.organizationId);
-
-    const rules=[...this.ruleStore.values()].filter(r=>r.organizationId===event.organizationId).filter(r=>r.eventType===event.eventType)
-      .filter(r=>r.status==="published"&&r.enabled).filter(r=>this.#matchesConditions(r.conditions,event));
+    const rules=[...this.ruleStore.values()].filter(r=>r.organizationId===event.organizationId).filter(r=>r.eventType===event.eventType).filter(r=>r.status==="published"&&r.enabled).filter(r=>this.#matchesConditions(r.conditions,event));
     const results=[];
-
     for(const rule of rules){
       const recipients=this.#resolveRecipients(rule,event);
       if(recipients.length===0)throw new Error("No recipientId could be resolved for notification rule");
       const templates=rule.templateIds.map(id=>this.templateStore.get(id)).filter(t=>t&&t.organizationId===event.organizationId&&t.status==="published");
-
-      for(const recipientId of recipients) for(const template of templates){
+      for(const recipientId of recipients)for(const template of templates){
         if(!rule.allowedChannels.includes(template.channel))continue;
         const rendered=this.#renderTemplate(template,event);
         const result={id:crypto.randomUUID(),ruleId:rule.id,eventId:event.id,recipientId,deliveryKey:[event.id,rule.id,template.id,recipientId].join(":"),channel:template.channel,status:"queued"};
-
         if(template.channel==="in_app"){
           const outcome=await this.notificationService.createWithResult({
             principal,id:result.id,organizationId:event.organizationId,recipientId,
@@ -74,18 +66,14 @@ class NotificationEventProcessor {
             relatedEntityType:event.entityType,relatedEntityId:event.entityId,sourceEventId:event.id,sourceEventType:event.eventType,
             deliveryKey:result.deliveryKey,templateId:template.id,templateVersion:template.version,requiresAcknowledgement:rule.required
           });
-          result.status=outcome.created?"created":"deduplicated";
-          result.notificationId=outcome.notification.id;
-          if(this.deliveryAttemptRepository){
+          result.status=outcome.created?"created":"deduplicated";result.notificationId=outcome.notification.id;
+          if(this.deliveryAttemptRepository && outcome.created){
             await this.notificationService.transaction(principal,"notification.delivery-attempt.create",async db=>{
-              const attemptId=outcome.notification.id+":in_app:1";
-              const existing=await this.deliveryAttemptRepository.get({principal,deliveryAttemptId:attemptId,db});
-              if(!existing){
-                await this.deliveryAttemptRepository.create({principal,attempt:{
-                  id:attemptId,notificationId:outcome.notification.id,channel:"in_app",provider:"internal",status:"delivered",attemptNumber:1,
-                  idempotencyKey:result.deliveryKey+":attempt:1",requestedAt:outcome.notification.createdAt,deliveredAt:outcome.notification.createdAt
-                },db});
-              }
+              await this.deliveryAttemptRepository.create({principal,attempt:{
+                id:result.id+":in_app:1",notificationId:outcome.notification.id,channel:"in_app",provider:"internal",
+                status:"delivered",attemptNumber:1,idempotencyKey:result.deliveryKey+":attempt:1",requestedAt:outcome.notification.createdAt,
+                deliveredAt:outcome.notification.createdAt,maxAttempts:1
+              },db});
             });
           }
         }else{
@@ -97,7 +85,6 @@ class NotificationEventProcessor {
     }
     return results;
   }
-
 
   #resolveRecipients(rule,event){const ids=new Set();for(const rr of rule.recipientRules){const resolved=this.recipientResolver(rr,event);for(const id of (Array.isArray(resolved)?resolved:[resolved]))if(id)ids.add(id);}return [...ids];}
   #renderTemplate(template,event){const variables=new Set(template.variables);const context={eventId:event.id,eventType:event.eventType,entityType:event.entityType,entityId:event.entityId,source:event.source,occurredAt:event.occurredAt,actorUserId:event.actorUserId,...event.payload};const render=v=>String(v).replace(/{{\s*([A-Za-z0-9_.-]+)\s*}}/g,(match,name)=>{if(!variables.has(name))return match;const value=NotificationEventProcessor.getPath(context,name);return value==null?"":String(value);});return{subject:template.subject?render(template.subject):null,body:render(template.body)};}

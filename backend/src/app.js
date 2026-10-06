@@ -36,6 +36,8 @@ const { DomainEventRepository } = require("./repositories/domainEventRepository"
 const { DomainEventOutboxRepository } = require("./repositories/domainEventOutboxRepository");
 const { NotificationRepository } = require("./repositories/notificationRepository");
 const { NotificationDeliveryAttemptRepository } = require("./repositories/notificationDeliveryAttemptRepository");
+const { NotificationDeliveryWorker } = require("./services/notificationDeliveryWorker");
+const { NotificationProviderRegistry } = require("./services/notificationProviderRegistry");
 const { withTransaction } = require("./database");
 
 const MAX_BODY_BYTES = 1024 * 1024;
@@ -117,6 +119,18 @@ function createAppState(seed = {}) {
     notificationService,
     deliveryAttemptRepository: notificationDeliveryAttemptRepository
   });
+  const notificationProviderRegistry = new NotificationProviderRegistry();
+  const notificationDeliveryWorker = databasePool ? new NotificationDeliveryWorker({
+    transaction,
+    outboxRepository: domainEventOutboxRepository,
+    eventRepository: domainEventRepository,
+    notificationEventProcessor,
+    notificationProviderRegistry,
+    notificationDeliveryWorker,
+    notificationRepository,
+    deliveryAttemptRepository: notificationDeliveryAttemptRepository,
+    providerRegistry: notificationProviderRegistry.providers
+  }) : null;
   const jobRepository = databasePool ? new JobRepository({ pool: databasePool }) : null;
   const workOrderRepository = databasePool ? new WorkOrderRepository({ pool: databasePool }) : null;
   const resourceRepository = databasePool ? new ResourceRepository({ pool: databasePool }) : null;

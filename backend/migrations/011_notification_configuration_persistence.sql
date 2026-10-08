@@ -157,6 +157,9 @@ BEGIN
     RETURN NEW;
   END IF;
 
+  -- Align database-level publication with repository lifecycle locking.
+  PERFORM 1 FROM organizations WHERE id = NEW.organization_id FOR UPDATE;
+
   FOR ref IN SELECT value FROM jsonb_array_elements(NEW.template_refs)
   LOOP
     IF NOT (ref ? 'templateId' AND ref ? 'version')
@@ -220,17 +223,24 @@ RETURNS trigger
 LANGUAGE plpgsql
 AS $notif_config$
 BEGIN
-  IF NEW.status = 'archived' AND OLD.status IS DISTINCT FROM 'archived' AND EXISTS (
-    SELECT 1
-      FROM notification_rules rule
-      CROSS JOIN LATERAL jsonb_array_elements(rule.template_refs) ref
-     WHERE rule.organization_id = OLD.organization_id
-       AND rule.status = 'published'
-       AND rule.enabled = true
-       AND ref->>'templateId' = OLD.template_id
-       AND (ref->>'version')::INTEGER = OLD.version
-  ) THEN
-    RAISE EXCEPTION 'cannot archive a notification template version referenced by an enabled published rule; deactivate or archive the rule first';
+  IF NEW.status IN ('inactive','archived')
+     AND OLD.status = 'published'
+     AND NEW.status IS DISTINCT FROM OLD.status THEN
+    -- Match the organization lock used by version allocation and rule publication.
+    PERFORM 1 FROM organizations WHERE id = OLD.organization_id FOR UPDATE;
+
+    IF EXISTS (
+      SELECT 1
+        FROM notification_rules rule
+        CROSS JOIN LATERAL jsonb_array_elements(rule.template_refs) ref
+       WHERE rule.organization_id = OLD.organization_id
+         AND rule.status = 'published'
+         AND rule.enabled = true
+         AND ref->>'templateId' = OLD.template_id
+         AND (ref->>'version')::INTEGER = OLD.version
+    ) THEN
+      RAISE EXCEPTION 'cannot deactivate or archive a published notification template version referenced by an enabled published rule; archive the rule first';
+    END IF;
   END IF;
   RETURN NEW;
 END;

@@ -69,6 +69,22 @@ assert.equal(replayResults.length, 1);
 assert.equal(replayResults[0].status, "deduplicated");
 assert.equal(notificationStore.size, 1);
 
+// Invalid published-rule dependencies fail deterministically instead of silently skipping work.
+const invalidRule=new NotificationRule({...rule,id:"rule-invalid",templateRefs:[{templateId:"missing-template",version:4}],templateIds:undefined});
+const invalidProcessor=new NotificationEventProcessor({
+  ruleStore:new Map([[invalidRule.id,invalidRule]]),
+  templateStore:new Map([[template.id,template]]),
+  notificationService
+});
+assert.throws(()=>invalidProcessor.process({principal,event}),/unavailable or invalid template version/i);
+const wrongChannelRule=new NotificationRule({...rule,id:"rule-wrong-channel",allowedChannels:["email"]});
+const wrongChannelProcessor=new NotificationEventProcessor({
+  ruleStore:new Map([[wrongChannelRule.id,wrongChannelRule]]),
+  templateStore:new Map([[template.id,template]]),
+  notificationService
+});
+assert.throws(()=>wrongChannelProcessor.process({principal,event}),/disallowed channel/i);
+
 assert.equal(processor.process({
   principal,
   event: new DomainEvent({

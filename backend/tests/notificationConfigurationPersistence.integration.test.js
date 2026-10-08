@@ -123,19 +123,23 @@ test("durable notification configuration pins versions, survives fresh instances
     ()=>services.configurationService.archiveTemplate({principal:principalA,templateId:templateV1.id,version:1}),
     /cannot archive.*enabled published rule/i
   );
-  assert.equal((await services.configurationService.getTemplate({principal:principalA,templateId:templateV1.id,version:1})).status,"published");
-  // Temporary inactivation prevents rule publication/processing but preserves frozen content.
+  // Temporary inactivation remains a distinct lifecycle state and can be restored.
   await transaction(principalA,"template.temporary-inactive",db=>db.query(
-    "UPDATE notification_templates SET status='inactive' WHERE organization_id=$1 AND template_id=$2 AND version=2",
+    "UPDATE notification_templates SET status='inactive' WHERE organization_id=$1 AND template_id=$2 AND version=1",
     [orgA,templateV1.id]
   ));
-  assert.equal((await services.configurationService.getTemplate({principal:principalA,templateId:templateV1.id,version:2})).status,"inactive");
+  assert.equal((await services.configurationService.getTemplate({principal:principalA,templateId:templateV1.id,version:1})).status,"inactive");
   await assert.rejects(()=>services.configurationService.publishRule({principal:principalA,ruleId:pendingRule.id}),/published template/i);
-  // Database enforcement rejects the same unsafe transition when bypassing the service.
+  // The active rule still references v1, so inactivation is reversible but archival is blocked.
+  await assert.rejects(()=>services.configurationService.archiveTemplate({principal:principalA,templateId:templateV1.id,version:1}),/only active template versions|cannot archive/i);
   await assert.rejects(()=>transaction(principalA,"template.illegal-archive",db=>db.query(
     "UPDATE notification_templates SET status='archived',archived_at=now() WHERE organization_id=$1 AND template_id=$2 AND version=1",
     [orgA,templateV1.id]
   )),/cannot archive.*enabled published rule/i);
+  await transaction(principalA,"template.reactivate-v1",db=>db.query(
+    "UPDATE notification_templates SET status='published' WHERE organization_id=$1 AND template_id=$2 AND version=1",
+    [orgA,templateV1.id]
+  ));
 
   // Published version content is immutable. A new version is separate; the rule remains pinned to v1.
   await assert.rejects(()=>transaction(principalA,"template.illegal-edit",db=>db.query(

@@ -158,6 +158,7 @@ class NotificationConfigurationService {
 
   async #durableCreateTemplate({principal,...input}) {
     this.#requirePrincipal(principal);
+    if(input.organizationId&&input.organizationId!==principal.organizationId) throw new Error("Not authorized");
     const item=new NotificationTemplate({...input,organizationId:principal.organizationId,status:"draft"});
     this.#authorize(principal,ACTIONS.TEMPLATE_CREATE,item.organizationId);
     const result=await this.transaction(principal,"notification.configuration.template.create",async db=>{
@@ -206,6 +207,7 @@ class NotificationConfigurationService {
   }
   async #durableCreateRule({principal,...input}) {
     this.#requirePrincipal(principal);
+    if(input.organizationId&&input.organizationId!==principal.organizationId) throw new Error("Not authorized");
     const item=new NotificationRule({...input,organizationId:principal.organizationId,status:"draft"});
     this.#authorize(principal,ACTIONS.RULE_CREATE,item.organizationId);
     return this.transaction(principal,"notification.configuration.rule.create",async db=>{

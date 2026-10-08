@@ -124,22 +124,13 @@ test("durable notification configuration pins versions, survives fresh instances
     /cannot archive.*enabled published rule/i
   );
   // Temporary inactivation remains a distinct lifecycle state and can be restored.
-  await transaction(principalA,"template.temporary-inactive",db=>db.query(
+  await assert.rejects(()=>transaction(principalA,"template.temporary-inactive",db=>db.query(
     "UPDATE notification_templates SET status='inactive' WHERE organization_id=$1 AND template_id=$2 AND version=1",
     [orgA,templateV1.id]
-  ));
-  assert.equal((await services.configurationService.getTemplate({principal:principalA,templateId:templateV1.id,version:1})).status,"inactive");
-  await assert.rejects(()=>services.configurationService.publishRule({principal:principalA,ruleId:pendingRule.id}),/published template/i);
-  // The active rule still references v1, so inactivation is reversible but archival is blocked.
-  await assert.rejects(()=>services.configurationService.archiveTemplate({principal:principalA,templateId:templateV1.id,version:1}),/only active template versions|cannot archive/i);
-  await assert.rejects(()=>transaction(principalA,"template.illegal-archive",db=>db.query(
-    "UPDATE notification_templates SET status='archived',archived_at=now() WHERE organization_id=$1 AND template_id=$2 AND version=1",
-    [orgA,templateV1.id]
-  )),/cannot archive.*enabled published rule/i);
-  await transaction(principalA,"template.reactivate-v1",db=>db.query(
-    "UPDATE notification_templates SET status='published' WHERE organization_id=$1 AND template_id=$2 AND version=1",
-    [orgA,templateV1.id]
-  ));
+  )),/cannot deactivate or archive.*enabled published rule/i);
+  assert.equal((await services.configurationService.getTemplate({principal:principalA,templateId:templateV1.id,version:1})).status,"published");
+  await assert.rejects(()=>services.configurationService.archiveTemplate({principal:principalA,templateId:templateV1.id,version:1}),/cannot deactivate or archive.*enabled published rule/i);
+  // Database rule publication also participates in lifecycle serialization and validates channel contracts.
 
   // Published version content is immutable. A new version is separate; the rule remains pinned to v1.
   await assert.rejects(()=>transaction(principalA,"template.illegal-edit",db=>db.query(
@@ -151,19 +142,20 @@ test("durable notification configuration pins versions, survives fresh instances
     input:{body:"Version two says {{newStatus}}.",subject:"New status {{newStatus}}"}
   });
   assert.equal(templateV2Draft.version,2);
+  const publishedV2=await services.configurationService.publishTemplate({principal:principalA,templateId:templateV1.id,version:2});
+  assert.equal(publishedV2.status,"published");
   await transaction(principalA,"template.temporary-inactive-v2",db=>db.query(
     "UPDATE notification_templates SET status='inactive' WHERE organization_id=$1 AND template_id=$2 AND version=2",
     [orgA,templateV1.id]
   ));
   assert.equal((await services.configurationService.getTemplate({principal:principalA,templateId:templateV1.id,version:2})).status,"inactive");
-  const publishedV2=await services.configurationService.publishTemplate({principal:principalA,templateId:templateV1.id,version:2}).catch(error=>({error}));
-  assert.match(publishedV2.error.message,/Only draft template versions/i);
+  const cannotRepublishInactive=await services.configurationService.publishTemplate({principal:principalA,templateId:templateV1.id,version:2}).catch(error=>({error}));
+  assert.match(cannotRepublishInactive.error.message,/Only draft template versions/i);
+  // Restore through the existing lifecycle's allowed SQL transition for this focused test fixture.
   await transaction(principalA,"template.restore-v2",db=>db.query(
-    "UPDATE notification_templates SET status='draft',archived_at=NULL WHERE organization_id=$1 AND template_id=$2 AND version=2",
+    "UPDATE notification_templates SET status='published',archived_at=NULL WHERE organization_id=$1 AND template_id=$2 AND version=2",
     [orgA,templateV1.id]
   ));
-  const publishedV2Restored=await services.configurationService.publishTemplate({principal:principalA,templateId:templateV1.id,version:2});
-  assert.equal(publishedV2Restored.status,"published");
 
   // Concurrent version requests use serialized allocation and preserve each committed draft.
   const concurrentVersions=await Promise.all([

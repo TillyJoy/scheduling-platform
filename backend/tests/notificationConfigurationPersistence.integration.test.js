@@ -153,7 +153,7 @@ test("durable notification configuration pins versions, survives fresh instances
   assert.equal(templateV2.version,2);
   const publishedV2=await services.configurationService.publishTemplate({principal:principalA,templateId:templateV1.id,version:2});
   assert.equal(publishedV2.status,"published");
-  await transaction(principalA,"template.reactivate",db=>db.query(
+  await transaction(principalA,"template.reactivate-v2",db=>db.query(
     "UPDATE notification_templates SET status='published' WHERE organization_id=$1 AND template_id=$2 AND version=2",
     [orgA,templateV1.id]
   ));

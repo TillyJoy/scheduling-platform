@@ -146,17 +146,24 @@ test("durable notification configuration pins versions, survives fresh instances
     "UPDATE notification_templates SET body=$4 WHERE organization_id=$1 AND template_id=$2 AND version=$3",
     [orgA,templateV1.id,1,"Illegal mutation"]
   )),/immutable/i);
-  const templateV2=await services.configurationService.createTemplateVersion({
+  const templateV2Draft=await services.configurationService.createTemplateVersion({
     principal:principalA,templateId:templateV1.id,sourceVersion:1,
     input:{body:"Version two says {{newStatus}}.",subject:"New status {{newStatus}}"}
   });
-  assert.equal(templateV2.version,2);
-  const publishedV2=await services.configurationService.publishTemplate({principal:principalA,templateId:templateV1.id,version:2});
-  assert.equal(publishedV2.status,"published");
-  await transaction(principalA,"template.reactivate-v2",db=>db.query(
-    "UPDATE notification_templates SET status='published' WHERE organization_id=$1 AND template_id=$2 AND version=2",
+  assert.equal(templateV2Draft.version,2);
+  await transaction(principalA,"template.temporary-inactive-v2",db=>db.query(
+    "UPDATE notification_templates SET status='inactive' WHERE organization_id=$1 AND template_id=$2 AND version=2",
     [orgA,templateV1.id]
   ));
+  assert.equal((await services.configurationService.getTemplate({principal:principalA,templateId:templateV1.id,version:2})).status,"inactive");
+  const publishedV2=await services.configurationService.publishTemplate({principal:principalA,templateId:templateV1.id,version:2}).catch(error=>({error}));
+  assert.match(publishedV2.error.message,/Only draft template versions/i);
+  await transaction(principalA,"template.restore-v2",db=>db.query(
+    "UPDATE notification_templates SET status='draft',archived_at=NULL WHERE organization_id=$1 AND template_id=$2 AND version=2",
+    [orgA,templateV1.id]
+  ));
+  const publishedV2Restored=await services.configurationService.publishTemplate({principal:principalA,templateId:templateV1.id,version:2});
+  assert.equal(publishedV2Restored.status,"published");
 
   // Concurrent version requests use serialized allocation and preserve each committed draft.
   const concurrentVersions=await Promise.all([

@@ -10,14 +10,23 @@ class NotificationRuleRepository {
     this.#requirePrincipal(principal);
     if(rule.organizationId&&rule.organizationId!==principal.organizationId) throw new Error("Notification rule organization mismatch");
     const record=new NotificationRule({...rule,organizationId:principal.organizationId,status:"draft"});
+    await db.query("SELECT id FROM organizations WHERE id=$1 FOR UPDATE",[principal.organizationId]);
     const refs=record.templateRefs.map(ref=>({templateId:ref.templateId,version:ref.version}));
+    const validatedTemplates=[];
     for(const ref of refs) if(ref.version!==null) {
       const template=await this.templateRepository.getVersion({principal,templateId:ref.templateId,version:ref.version,db});
       if(!template||template.organizationId!==principal.organizationId) throw new Error("Rule references an invalid notification template");
+      if(template.status!=="published") throw new Error("Rule references an unpublished notification template version");
+      ref.version=template.version;
+      validatedTemplates.push(template);
     } else {
       const latest=await this.templateRepository.getLatest({principal,templateId:ref.templateId,db,publishedOnly:true});
       if(!latest) throw new Error("Rule references an invalid notification template");
       ref.version=latest.version;
+      validatedTemplates.push(latest);
+    }
+    for(const template of validatedTemplates) {
+      if(!record.allowedChannels.includes(template.channel)) throw new Error("Rule template channel is not allowed by the rule");
     }
     const result=await db.query(
       `INSERT INTO notification_rules (organization_id,rule_id,name,event_type,conditions,recipient_rules,template_refs,allowed_channels,timing,required,priority,enabled,status,created_at,updated_at)

@@ -10,7 +10,8 @@ assert.throws(()=>service.publishRule({principal:admin,ruleId:"rule-1"}),/Notifi
 const template=service.publishTemplate({principal:admin,templateId:"template-1"});
 assert.equal(template.status,"published");
 assert.ok(template.publishedAt);
-assert.equal(service.archiveTemplate({principal:admin,templateId:"template-1"}).status,"archived");
+// Keep the published fixture available for the subsequently created rule; archive behavior is covered below after the rule is archived.
+assert.equal(service.getTemplate({principal:admin,templateId:"template-1",version:1}).status,"published");
 
 service.createRule({principal:admin,id:"rule-1",organizationId:"org-a",name:"Notify when appointment changes",eventType:"appointment.rescheduled",conditions:{appointmentStatus:"scheduled"},recipientRules:["appointment.participant"],templateIds:["template-1"],allowedChannels:["email"],timing:{mode:"immediate"},required:true});
 const rule=service.publishRule({principal:admin,ruleId:"rule-1"});

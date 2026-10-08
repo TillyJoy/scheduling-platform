@@ -74,7 +74,7 @@ CREATE POLICY notification_rules_tenant_isolation ON notification_rules
 CREATE OR REPLACE FUNCTION prevent_published_notification_template_mutation()
 RETURNS trigger
 LANGUAGE plpgsql
-AS $
+AS $notif_config$
 BEGIN
   IF TG_OP = 'DELETE' THEN
     IF OLD.status = 'published' THEN
@@ -100,7 +100,7 @@ BEGIN
   END IF;
   RETURN NEW;
 END;
-$;
+$notif_config$;
 
 DROP TRIGGER IF EXISTS notification_templates_immutable_published ON notification_templates;
 CREATE TRIGGER notification_templates_immutable_published
@@ -110,7 +110,7 @@ FOR EACH ROW EXECUTE FUNCTION prevent_published_notification_template_mutation()
 CREATE OR REPLACE FUNCTION prevent_published_notification_rule_mutation()
 RETURNS trigger
 LANGUAGE plpgsql
-AS $
+AS $notif_config$
 BEGIN
   IF TG_OP = 'DELETE' THEN
     IF OLD.status <> 'draft' THEN
@@ -138,7 +138,7 @@ BEGIN
   END IF;
   RETURN NEW;
 END;
-$;
+$notif_config$;
 
 DROP TRIGGER IF EXISTS notification_rules_published_immutable ON notification_rules;
 CREATE TRIGGER notification_rules_published_immutable
@@ -148,7 +148,7 @@ FOR EACH ROW EXECUTE FUNCTION prevent_published_notification_rule_mutation();
 CREATE OR REPLACE FUNCTION validate_published_notification_rule_templates()
 RETURNS trigger
 LANGUAGE plpgsql
-AS $$
+AS $notif_config$
 DECLARE
   ref JSONB;
   referenced_template notification_templates%ROWTYPE;
@@ -178,7 +178,7 @@ BEGIN
   END LOOP;
   RETURN NEW;
 END;
-$$;
+$notif_config$;
 
 DROP TRIGGER IF EXISTS notification_rules_valid_template_refs ON notification_rules;
 CREATE CONSTRAINT TRIGGER notification_rules_valid_template_refs
@@ -189,7 +189,7 @@ FOR EACH ROW EXECUTE FUNCTION validate_published_notification_rule_templates();
 CREATE OR REPLACE FUNCTION prevent_notification_template_version_mutation()
 RETURNS trigger
 LANGUAGE plpgsql
-AS $$
+AS $notif_config$
 BEGIN
   IF OLD.template_id IS DISTINCT FROM NEW.template_id
     OR OLD.organization_id IS DISTINCT FROM NEW.organization_id
@@ -199,7 +199,7 @@ BEGIN
   END IF;
   RETURN NEW;
 END;
-$$;
+$notif_config$;
 
 DROP TRIGGER IF EXISTS notification_template_version_identity_immutable ON notification_templates;
 CREATE TRIGGER notification_template_version_identity_immutable

@@ -8,8 +8,8 @@ class AuditEventRepository {
     if(event.organizationId&&event.organizationId!==principal.organizationId) throw new Error("Audit event organization mismatch");
     const record=new AuditEvent({...event,organizationId:principal.organizationId,userId:principal.userId,createdAt:event.createdAt||this.clock()});
     const result=await db.query(
-      \`INSERT INTO audit_events (id,organization_id,user_id,action,entity_type,entity_id,previous_value,new_value,source,created_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9,$10) RETURNING *\`,
+      `INSERT INTO audit_events (id,organization_id,user_id,action,entity_type,entity_id,previous_value,new_value,source,created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9,$10) RETURNING *`,
       [record.id,record.organizationId,record.userId,record.action,record.entityType,record.entityId,
        record.previousValue==null?null:JSON.stringify(record.previousValue),record.newValue==null?null:JSON.stringify(record.newValue),record.source,record.createdAt]
     );

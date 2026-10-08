@@ -61,11 +61,29 @@ assert.equal([...notificationStore.values()][0].recipientId, "user-1");
 assert.equal([...notificationStore.values()][0].message, "Job job-1 changed from new to ready.");
 assert.equal([...notificationStore.values()][0].sourceEventId, "event-1");
 assert.equal([...notificationStore.values()][0].deliveryKey, "event-1:rule-1:template-1:user-1");
+assert.equal([...notificationStore.values()][0].templateId, "template-1");
+assert.equal([...notificationStore.values()][0].templateVersion, 1);
 
 const replayResults = processor.process({ principal, event });
 assert.equal(replayResults.length, 1);
 assert.equal(replayResults[0].status, "deduplicated");
 assert.equal(notificationStore.size, 1);
+
+// Invalid published-rule dependencies fail deterministically instead of silently skipping work.
+const invalidRule=new NotificationRule({...rule,id:"rule-invalid",templateRefs:[{templateId:"missing-template",version:4}],templateIds:undefined});
+const invalidProcessor=new NotificationEventProcessor({
+  ruleStore:new Map([[invalidRule.id,invalidRule]]),
+  templateStore:new Map([[template.id,template]]),
+  notificationService
+});
+assert.throws(()=>invalidProcessor.process({principal,event}),/unavailable or invalid template version/i);
+const wrongChannelRule=new NotificationRule({...rule,id:"rule-wrong-channel",allowedChannels:["email"]});
+const wrongChannelProcessor=new NotificationEventProcessor({
+  ruleStore:new Map([[wrongChannelRule.id,wrongChannelRule]]),
+  templateStore:new Map([[template.id,template]]),
+  notificationService
+});
+assert.throws(()=>wrongChannelProcessor.process({principal,event}),/disallowed channel/i);
 
 assert.equal(processor.process({
   principal,

@@ -30,6 +30,12 @@ const { AvailabilityService } = require("./services/availabilityService");
 const { StatusConfigurationService } = require("./services/statusConfigurationService");
 const { AssignmentService } = require("./services/assignmentService");
 const { withTransaction } = require("./database");
+const { NotificationConfigurationService } = require("./services/notificationConfigurationService");
+const { NotificationEventProcessor } = require("./services/notificationEventProcessor");
+const { NotificationTemplateRepository } = require("./repositories/notificationTemplateRepository");
+const { NotificationRuleRepository } = require("./repositories/notificationRuleRepository");
+const { AuditEventRepository } = require("./repositories/auditEventRepository");
+const { NotificationRepository } = require("./repositories/notificationRepository");
 
 const MAX_BODY_BYTES = 1024 * 1024;
 const FRONTEND_FILES = {
@@ -85,6 +91,27 @@ function createAppState(seed = {}) {
   const transaction = databasePool
     ? (principal, action, work) => withTransaction(databasePool, { organizationId: principal.organizationId, userId: principal.userId, action }, work)
     : null;
+  const notificationTemplateRepository = databasePool ? new NotificationTemplateRepository({pool:databasePool}) : null;
+  const notificationRuleRepository = databasePool ? new NotificationRuleRepository({pool:databasePool,templateRepository:notificationTemplateRepository}) : null;
+  const auditRepository = databasePool ? new AuditEventRepository({pool:databasePool}) : null;
+  const notificationRepository = databasePool ? new NotificationRepository({pool:databasePool}) : null;
+  const notificationConfigurationService = new NotificationConfigurationService({
+    templateStore:seed.notificationTemplateStore || new Map(),
+    ruleStore:seed.notificationRuleStore || new Map(),
+    auditStore:auditEvents,
+    ...(databasePool ? {templateRepository:notificationTemplateRepository,ruleRepository:notificationRuleRepository,auditRepository,transaction} : {})
+  });
+  const notificationStore = seed.notificationStore || new Map();
+  const notificationService = databasePool ? new (require("./services/notificationService").NotificationService)({
+    notificationRepository,transaction
+  }) : new (require("./services/notificationService").NotificationService)({notificationStore,auditStore:auditEvents});
+  const notificationEventProcessor = new NotificationEventProcessor({
+    ruleStore:notificationConfigurationService.ruleStore,
+    templateStore:notificationConfigurationService.templateStore,
+    notificationService,
+    configurationService:notificationConfigurationService,
+    ...(databasePool ? {transaction,durableConfiguration:true} : {})
+  });
   const jobRepository = databasePool ? new JobRepository({ pool: databasePool }) : null;
   const workOrderRepository = databasePool ? new WorkOrderRepository({ pool: databasePool }) : null;
   const resourceRepository = databasePool ? new ResourceRepository({ pool: databasePool }) : null;
@@ -238,7 +265,15 @@ function createAppState(seed = {}) {
     appointmentStatusResolver,
     appointmentService,
     authenticationService: seed.authenticationService || null,
-    databasePool
+    databasePool,
+    notificationConfigurationService,
+    notificationEventProcessor,
+    notificationService,
+    notificationStore,
+    notificationTemplateRepository,
+    notificationRuleRepository,
+    notificationRepository,
+    auditRepository
   };
 }
 

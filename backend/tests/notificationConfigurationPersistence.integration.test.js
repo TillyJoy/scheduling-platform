@@ -151,12 +151,11 @@ test("durable notification configuration pins versions, survives fresh instances
   assert.equal((await services.configurationService.getTemplate({principal:principalA,templateId:templateV1.id,version:2})).status,"inactive");
   const cannotRepublishInactive=await services.configurationService.publishTemplate({principal:principalA,templateId:templateV1.id,version:2}).catch(error=>({error}));
   assert.match(cannotRepublishInactive.error.message,/Only draft template versions/i);
-  // Temporary inactivity is reversible for an unreferenced version; content and version stay unchanged.
-  await transaction(principalA,"template.restore-v2",db=>db.query(
-    "UPDATE notification_templates SET status='published',archived_at=NULL WHERE organization_id=$1 AND template_id=$2 AND version=2",
-    [orgA,templateV1.id]
-  ));
-  assert.equal((await services.configurationService.getTemplate({principal:principalA,templateId:templateV1.id,version:2})).status,"published");
+  // A distinct unreferenced inactive version may be archived without affecting the active rule's v1 pin.
+  const archivedInactive=await services.configurationService.archiveTemplate({principal:principalA,templateId:templateV1.id,version:2});
+  assert.equal(archivedInactive.status,"archived");
+  assert.equal((await services.configurationService.getTemplate({principal:principalA,templateId:templateV1.id,version:1})).status,"published");
+  // New version creation always allocates a version greater than archived history.
 
   // Concurrent version requests use serialized allocation and preserve each committed draft.
   const concurrentVersions=await Promise.all([

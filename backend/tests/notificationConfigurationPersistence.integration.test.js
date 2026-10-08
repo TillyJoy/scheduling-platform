@@ -141,7 +141,11 @@ test("durable notification configuration pins versions, survives fresh instances
     notificationRepository:new NotificationRepository({pool}),auditRepository:new AuditEventRepository({pool}),transaction
   });
   const notifications=await freshNotificationService.listForRecipient({principal:principalA});
-  assert.equal(notifications.length,1);
+  const persistedNotificationDiagnostics=await transaction(principalA,"test.notification.diagnostics",db=>db.query(
+    "SELECT id,organization_id,recipient_id,source_event_id,template_id,template_version FROM notifications WHERE organization_id=$1",
+    [orgA]
+  ));
+  assert.equal(notifications.length,1,JSON.stringify({diagnostics:persistedNotificationDiagnostics.rows,principalUserId:principalA.userId}));
   assert.equal(notifications[0].templateId,templateV1.id);
   assert.equal(notifications[0].templateVersion,1);
   assert.equal(notifications[0].message,"Version one says ready.");

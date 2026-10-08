@@ -282,3 +282,96 @@ test("notification delivery claims skip rows locked by another PostgreSQL transa
     client.release();
   }
 });
+
+
+test("delivery worker stops at max attempts and never retries a permanent provider rejection",{skip:!shouldRun},async t=>{
+  const pool=createDatabasePool();
+  const suffix=randomUUID(),org="worker-retry-edges-"+suffix,role="worker_retry_edges_"+suffix.replace(/[^a-zA-Z0-9_]/g,"_");
+  const principal={userId:"worker-retry-user-"+suffix,organizationId:org,permissions:["notification:dispatch","notification:create"]};
+  const workerPrincipal=organizationId=>({userId:"system-worker-"+suffix,organizationId,permissions:["event:dispatch","notification:dispatch","notification:create"]});
+  let now=new Date("2026-10-06T12:00:00.000Z");
+  await runMigrations(pool);
+  const tx=(p,action,work)=>withTransaction(pool,{organizationId:p.organizationId,userId:p.userId,action},async db=>{
+    await db.query('SET LOCAL ROLE "'+role+'"');
+    return work(db);
+  });
+  const notificationRepo=new NotificationRepository({pool});
+  const deliveryRepo=new NotificationDeliveryAttemptRepository({pool});
+  const eventRepo=new DomainEventRepository({pool});
+  const outboxRepo=new DomainEventOutboxRepository({pool});
+  const processor=new NotificationEventProcessor({ruleStore:new Map(),templateStore:new Map(),notificationService:new NotificationService({notificationRepository:notificationRepo,transaction:tx}),deliveryAttemptRepository:deliveryRepo});
+  t.after(async()=>{
+    await tx({...principal,userId:"cleanup"},"test.cleanup",async db=>{
+      await db.query("DELETE FROM notification_delivery_attempts WHERE organization_id=$1",[org]);
+      await db.query("DELETE FROM notifications WHERE organization_id=$1",[org]);
+      await db.query("DELETE FROM event_outbox WHERE organization_id=$1",[org]);
+      await db.query("DELETE FROM domain_events WHERE organization_id=$1",[org]);
+      await db.query("DELETE FROM audit_events WHERE organization_id=$1",[org]);
+      await db.query("DELETE FROM organizations WHERE id=$1",[org]);
+    }).catch(()=>{});
+    await pool.query('DROP ROLE IF EXISTS "'+role+'"').catch(()=>{});
+    await pool.end();
+  });
+  await pool.query("INSERT INTO organizations(id,name) VALUES($1,$2)",[org,"Worker Retry Edges"]);
+  await pool.query('CREATE ROLE "'+role+'" NOLOGIN NOSUPERUSER NOBYPASSRLS');
+  await pool.query('GRANT USAGE ON SCHEMA public TO "'+role+'"');
+  await pool.query('GRANT SELECT,INSERT,UPDATE,DELETE ON organizations,audit_events,domain_events,event_outbox,notifications,notification_delivery_attempts TO "'+role+'"');
+
+  const notification=await tx(principal,"fixture.notification",db=>notificationRepo.create({principal,notification:new (require("../src/models/notification").Notification)({
+    id:"retry-edge-notification-"+suffix,organizationId:org,recipientId:principal.userId,title:"Retry terminal cases",message:"Verify bounded delivery"
+  }),db}));
+  const exhausted=await tx(principal,"fixture.exhausted",db=>deliveryRepo.create({principal,attempt:{
+    id:"exhausted-"+suffix,notificationId:notification.id,channel:"email",provider:"retryable",status:"pending",
+    attemptNumber:2,idempotencyKey:"exhausted-key-"+suffix,availableAt:now,maxAttempts:2
+  },db}));
+  const permanent=await tx(principal,"fixture.permanent",db=>deliveryRepo.create({principal,attempt:{
+    id:"permanent-"+suffix,notificationId:notification.id,channel:"sms",provider:"permanent",status:"pending",
+    attemptNumber:1,idempotencyKey:"permanent-key-"+suffix,availableAt:now,maxAttempts:3
+  },db}));
+
+  let retryableCalls=0,permanentCalls=0;
+  const providers=new NotificationProviderRegistry();
+  providers.register("email","retryable",{send:async()=>{retryableCalls+=1;return{status:"failure",failureClass:"retryable",errorCode:"TEMP",errorMessage:"still temporary"};}});
+  providers.register("sms","permanent",{send:async()=>{permanentCalls+=1;return{status:"failure",failureClass:"permanent",errorCode:"INVALID_RECIPIENT",errorMessage:"recipient rejected"};}});
+  const worker=new NotificationDeliveryWorker({
+    transaction:tx,outboxRepository:outboxRepo,eventRepository:eventRepo,notificationEventProcessor:processor,
+    notificationRepository:notificationRepo,deliveryAttemptRepository:deliveryRepo,providerRegistry:providers.providers,
+    principalFactory:workerPrincipal,now:()=>now,leaseMs:1000,maxAttempts:3,backoff:()=>100
+  });
+
+  const results=await worker.processDeliveryAttempts(org);
+  assert.equal(results.length,2);
+  assert.deepEqual(results.map(result=>result.status),["failed","failed"]);
+  const exhaustedResult=results.find(result=>result.deliveryAttemptId===exhausted.id);
+  const permanentResult=results.find(result=>result.deliveryAttemptId===permanent.id);
+  assert.equal(exhaustedResult.terminal,true);
+  assert.equal(exhaustedResult.failureClass,"retryable");
+  assert.equal(permanentResult.terminal,true);
+  assert.equal(permanentResult.failureClass,"permanent");
+  assert.equal(retryableCalls,1);
+  assert.equal(permanentCalls,1);
+
+  const persisted=await tx(principal,"verify.terminal",db=>deliveryRepo.listForNotification({principal,notificationId:notification.id,db}));
+  const exhaustedRows=persisted.filter(attempt=>attempt.channel==="email");
+  const permanentRows=persisted.filter(attempt=>attempt.channel==="sms");
+  assert.equal(exhaustedRows.length,1);
+  assert.equal(exhaustedRows[0].id,exhausted.id);
+  assert.equal(exhaustedRows[0].status,"failed");
+  assert.equal(exhaustedRows[0].attemptNumber,2);
+  assert.equal(exhaustedRows[0].maxAttempts,2);
+  assert.equal(exhaustedRows[0].lockedAt,null);
+  assert.equal(exhaustedRows[0].metadata.failureClass,"retryable");
+  assert.equal(permanentRows.length,1);
+  assert.equal(permanentRows[0].id,permanent.id);
+  assert.equal(permanentRows[0].status,"failed");
+  assert.equal(permanentRows[0].attemptNumber,1);
+  assert.equal(permanentRows[0].metadata.failureClass,"permanent");
+  assert.equal(permanentRows[0].errorCode,"INVALID_RECIPIENT");
+
+  now=new Date(now.getTime()+100000);
+  const nextPoll=await worker.processDeliveryAttempts(org);
+  assert.equal(nextPoll.length,0);
+  assert.equal(retryableCalls,1);
+  assert.equal(permanentCalls,1);
+  assert.equal((await tx(principal,"verify.no-retries",db=>deliveryRepo.listForNotification({principal,notificationId:notification.id,db}))).length,2);
+});

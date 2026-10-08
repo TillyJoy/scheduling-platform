@@ -205,3 +205,72 @@ DROP TRIGGER IF EXISTS notification_template_version_identity_immutable ON notif
 CREATE TRIGGER notification_template_version_identity_immutable
 BEFORE UPDATE ON notification_templates
 FOR EACH ROW EXECUTE FUNCTION prevent_notification_template_version_mutation();
+
+
+-- Lifecycle safety hardening: active published rules may not depend on unavailable templates.
+-- The application service rejects unsafe archives; this trigger keeps the invariant for direct SQL writes.
+CREATE OR REPLACE FUNCTION prevent_referenced_notification_template_archive()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $notif_config$
+BEGIN
+  IF NEW.status = 'archived' AND OLD.status IS DISTINCT FROM 'archived' AND EXISTS (
+    SELECT 1
+      FROM notification_rules rule
+      CROSS JOIN LATERAL jsonb_array_elements(rule.template_refs) ref
+     WHERE rule.organization_id = OLD.organization_id
+       AND rule.status = 'published'
+       AND rule.enabled = true
+       AND ref->>'templateId' = OLD.template_id
+       AND (ref->>'version')::INTEGER = OLD.version
+  ) THEN
+    RAISE EXCEPTION 'cannot archive a notification template version referenced by an enabled published rule; deactivate or archive the rule first';
+  END IF;
+  RETURN NEW;
+END;
+$notif_config$;
+
+DROP TRIGGER IF EXISTS notification_templates_referenced_archive_guard ON notification_templates;
+CREATE TRIGGER notification_templates_referenced_archive_guard
+BEFORE UPDATE OF status ON notification_templates
+FOR EACH ROW EXECUTE FUNCTION prevent_referenced_notification_template_archive();
+
+-- Keep database enforcement aligned with service validation of exact published references and allowed channels.
+CREATE OR REPLACE FUNCTION validate_published_notification_rule_templates()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $notif_config$
+DECLARE
+  ref JSONB;
+  referenced_template notification_templates%ROWTYPE;
+BEGIN
+  IF NEW.status <> 'published' THEN
+    RETURN NEW;
+  END IF;
+
+  FOR ref IN SELECT value FROM jsonb_array_elements(NEW.template_refs)
+  LOOP
+    IF NOT (ref ? 'templateId' AND ref ? 'version')
+      OR jsonb_typeof(ref->'templateId') <> 'string'
+      OR jsonb_typeof(ref->'version') <> 'number'
+    THEN
+      RAISE EXCEPTION 'notification rule template references require templateId and version';
+    END IF;
+
+    SELECT * INTO referenced_template
+      FROM notification_templates
+      WHERE organization_id = NEW.organization_id
+        AND template_id = ref->>'templateId'
+        AND version = (ref->>'version')::INTEGER;
+
+    IF NOT FOUND OR referenced_template.status <> 'published' THEN
+      RAISE EXCEPTION 'notification rule references a missing, cross-tenant, or unpublished template version';
+    END IF;
+
+    IF NOT (NEW.allowed_channels ? referenced_template.channel) THEN
+      RAISE EXCEPTION 'notification rule template channel is not allowed by the rule';
+    END IF;
+  END LOOP;
+  RETURN NEW;
+END;
+$notif_config$;

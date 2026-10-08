@@ -151,7 +151,9 @@ test("durable notification configuration pins versions, survives fresh instances
   const replay=await processor.process({principal:principalA,event});
   assert.equal(replay.length,1);
   assert.equal(replay[0].status,"deduplicated");
-  assert.equal((await freshNotificationService.listForRecipient({principal:principalA})).length,1);
+  const replayRows=await transaction(principalA,"test.replay.count",db=>db.query("SELECT id,delivery_key FROM notifications WHERE organization_id=$1",[orgA]));
+  assert.equal(replayRows.rows.length,1,JSON.stringify({replay:replay[0],rows:replayRows.rows}));
+  assert.equal((await freshNotificationService.listForRecipient({principal:recipientPrincipal})).length,1);
 
   // Explicit tenant scoping prevents reading or mutating the other organization's records.
   const otherServices=freshServices();

@@ -4,9 +4,16 @@ const { AuditEvent } = require("../models/auditEvent");
 const ACTIONS = Object.freeze({ CREATE:"notification:create", READ:"notification:read", ACKNOWLEDGE:"notification:acknowledge", DISMISS:"notification:dismiss" });
 
 class NotificationService {
-  constructor({ notificationStore = new Map(), auditStore = [], authorize = NotificationService.defaultAuthorize } = {}) { this.notificationStore=notificationStore; this.auditStore=auditStore; this.authorize=authorize; }
+  constructor({ notificationStore = new Map(), auditStore = [], authorize = NotificationService.defaultAuthorize,
+    notificationRepository = null, auditRepository = null, transaction = null } = {}) {
+    if (notificationRepository && !transaction) throw new Error("transaction is required with durable notification persistence");
+    this.notificationStore=notificationStore; this.auditStore=auditStore; this.authorize=authorize;
+    this.notificationRepository=notificationRepository; this.auditRepository=auditRepository; this.transaction=transaction;
+  }
 
-  create({ principal, ...input }) {
+  create(args) {
+    if(this.notificationRepository) return this.#createDurable(args);
+    const { principal, ...input } = args;
     this.#requirePrincipal(principal);
     const notification = new Notification(input);
     this.#authorize(principal, ACTIONS.CREATE, { organizationId: notification.organizationId, recipientId: notification.recipientId });
@@ -22,15 +29,59 @@ class NotificationService {
     return notification;
   }
 
-  listForRecipient({ principal, status } = {}) {
+  listForRecipient(args = {}) {
+    if(this.notificationRepository) return this.#listDurable(args);
+    const {principal,status}=args;
     this.#requirePrincipal(principal);
     this.#authorize(principal, ACTIONS.READ, { organizationId:principal.organizationId, recipientId:principal.userId });
     return [...this.notificationStore.values()].filter(n=>n.organizationId===principal.organizationId).filter(n=>n.recipientId===principal.userId).filter(n=>!status||n.status===status).filter(n=>!n.isExpired()).sort((a,b)=>{ const order={critical:0,important:1,warning:2,information:3,success:4}; return (order[a.severity]-order[b.severity]) || (new Date(b.createdAt)-new Date(a.createdAt)); });
   }
 
-  markRead({ principal, notificationId }) { const n=this.#authorizedNotification(principal,ACTIONS.READ,notificationId); const previous=n.status; n.markRead(); this.#audit(n,principal.userId,"notification.read",previous,n.status); return n; }
-  acknowledge({ principal, notificationId }) { const n=this.#authorizedNotification(principal,ACTIONS.ACKNOWLEDGE,notificationId); const previous=n.status; n.acknowledge(); this.#audit(n,principal.userId,"notification.acknowledged",previous,n.status); return n; }
-  dismiss({ principal, notificationId }) { const n=this.#authorizedNotification(principal,ACTIONS.DISMISS,notificationId); const previous=n.status; n.dismiss(); this.#audit(n,principal.userId,"notification.dismissed",previous,n.status); return n; }
+  markRead({ principal, notificationId }) { if(this.notificationRepository) return this.#updateDurableStatus({principal,notificationId,status:"read",action:"notification.read",permission:ACTIONS.READ}); const n=this.#authorizedNotification(principal,ACTIONS.READ,notificationId); const previous=n.status; n.markRead(); this.#audit(n,principal.userId,"notification.read",previous,n.status); return n; }
+  acknowledge({ principal, notificationId }) { if(this.notificationRepository) return this.#updateDurableStatus({principal,notificationId,status:"acknowledged",action:"notification.acknowledged",permission:ACTIONS.ACKNOWLEDGE}); const n=this.#authorizedNotification(principal,ACTIONS.ACKNOWLEDGE,notificationId); const previous=n.status; n.acknowledge(); this.#audit(n,principal.userId,"notification.acknowledged",previous,n.status); return n; }
+  dismiss({ principal, notificationId }) { if(this.notificationRepository) return this.#updateDurableStatus({principal,notificationId,status:"dismissed",action:"notification.dismissed",permission:ACTIONS.DISMISS}); const n=this.#authorizedNotification(principal,ACTIONS.DISMISS,notificationId); const previous=n.status; n.dismiss(); this.#audit(n,principal.userId,"notification.dismissed",previous,n.status); return n; }
+
+  async #createDurable({principal,...input}) {
+    this.#requirePrincipal(principal);
+    const notification=new Notification(input);
+    this.#authorize(principal,ACTIONS.CREATE,{organizationId:notification.organizationId,recipientId:notification.recipientId});
+    if(notification.organizationId!==principal.organizationId) throw new Error("Not authorized");
+    return this.transaction(principal,"notification.create",async db=>{
+      if(notification.deliveryKey) {
+        const existing=await this.notificationRepository.findByDeliveryKey({principal,deliveryKey:notification.deliveryKey,db});
+        if(existing) return existing;
+      }
+      const created=await this.notificationRepository.create({principal,notification,db});
+      if(this.auditRepository) await this.auditRepository.create({principal,event:{
+        id:"notification-created:"+created.id,organizationId:principal.organizationId,action:"notification.created",
+        entityType:"notification",entityId:created.id,newValue:{severity:created.severity,recipientId:created.recipientId,
+          sourceEventId:created.sourceEventId,sourceEventType:created.sourceEventType,deliveryKey:created.deliveryKey,
+          templateId:created.templateId,templateVersion:created.templateVersion},source:"application"
+      },db});
+      return created;
+    });
+  }
+
+  async #listDurable({principal,status=null}={}) {
+    this.#requirePrincipal(principal);
+    this.#authorize(principal,ACTIONS.READ,{organizationId:principal.organizationId,recipientId:principal.userId});
+    return this.transaction(principal,"notification.list",db=>this.notificationRepository.listForRecipient({principal,status,db}));
+  }
+
+  async #updateDurableStatus({principal,notificationId,status,action,permission}) {
+    this.#requirePrincipal(principal);
+    return this.transaction(principal,action,async db=>{
+      const current=await this.notificationRepository.get({principal,notificationId,db});
+      if(!current) throw new Error("Notification not found");
+      this.#authorize(principal,permission,{organizationId:current.organizationId,recipientId:current.recipientId});
+      const updated=await this.notificationRepository.updateStatus({principal,notificationId,status,db});
+      if(this.auditRepository) await this.auditRepository.create({principal,event:{
+        id:action+":"+updated.id+":"+String(Date.now()),organizationId:principal.organizationId,action,
+        entityType:"notification",entityId:updated.id,previousValue:{status:current.status},newValue:{status:updated.status},source:"application"
+      },db});
+      return updated;
+    });
+  }
 
   #authorizedNotification(principal, action, notificationId) {
     this.#requirePrincipal(principal);

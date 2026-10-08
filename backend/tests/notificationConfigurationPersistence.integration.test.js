@@ -96,8 +96,8 @@ test("durable notification configuration pins versions, survives fresh instances
     await assert.rejects(()=>services.configurationService.publishRule({principal:principalA,ruleId:wrongChannelRule.id}),/channel is not allowed/i);
   }
   await assert.rejects(()=>transaction(principalA,"rule.illegal-channel",db=>db.query(
-    "INSERT INTO notification_rules (organization_id,rule_id,name,event_type,conditions,recipient_rules,template_refs,allowed_channels,status) VALUES ($1,$2,'Direct SQL invalid rule','job.status.changed','{}'::jsonb,'[{\\"type\\":\\"event_payload\\",\\"path\\":\\"recipientUserId\\"}]'::jsonb,$3::jsonb,'[\\"email\\"]'::jsonb,'published')",
-    [orgA,"illegal-channel-rule-"+suffix,JSON.stringify([{templateId:templateV1.id,version:1}])]
+    "INSERT INTO notification_rules (organization_id,rule_id,name,event_type,conditions,recipient_rules,template_refs,allowed_channels,status) VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb,$8::jsonb,'published')",
+    [orgA,"illegal-channel-rule-"+suffix,"Direct SQL invalid rule","job.status.changed","{}",JSON.stringify([{type:"event_payload",path:"recipientUserId"}]),JSON.stringify([{templateId:templateV1.id,version:1}]),JSON.stringify(["email"])]
   )),/channel is not allowed/i);
   const missingRuleDraft=await services.configurationService.createRule({
     principal:principalA,id:"missing-rule-"+suffix,name:"Missing reference",eventType:"job.status.changed",

@@ -28,6 +28,8 @@ class NotificationRuleRepository {
   }
   async publish({principal,ruleId,db=this.pool}={}) {
     this.#requirePrincipal(principal);
+    const locked=await db.query("SELECT status FROM notification_rules WHERE organization_id=$1 AND rule_id=$2 FOR UPDATE",[principal.organizationId,ruleId]);
+    if(!locked.rows[0]) throw new Error("Notification rule not found");
     const before=await this.get({principal,ruleId,db});
     if(!before) throw new Error("Notification rule not found");
     if(before.status==="published") return before;

@@ -11,17 +11,19 @@ const template=service.publishTemplate({principal:admin,templateId:"template-1"}
 assert.equal(template.status,"published");
 assert.ok(template.publishedAt);
 assert.throws(()=>service.archiveTemplate({principal:admin,templateId:"template-1"}),/immutable/i);
+
+service.createRule({principal:admin,id:"rule-1",organizationId:"org-a",name:"Notify when appointment changes",eventType:"appointment.rescheduled",conditions:{appointmentStatus:"scheduled"},recipientRules:["appointment.participant"],templateIds:["template-1"],allowedChannels:["email"],timing:{mode:"immediate"},required:true});
+const rule=service.publishRule({principal:admin,ruleId:"rule-1"});
+assert.equal(rule.status,"published");
+assert.equal(rule.templateRefs[0].version,1);
+
 const templateV2=service.createTemplateVersion({principal:admin,templateId:"template-1",input:{body:"Version two {{recipient.first_name}}"}});
 assert.equal(templateV2.version,2);
 assert.equal(templateV2.status,"draft");
 assert.equal(service.getTemplate({principal:admin,templateId:"template-1",version:1}).body,"Hello {{recipient.first_name}}, your appointment is now {{appointment.start_time}}.");
 const publishedV2=service.publishTemplate({principal:admin,templateId:"template-1",version:2});
 assert.equal(publishedV2.version,2);
-
-service.createRule({principal:admin,id:"rule-1",organizationId:"org-a",name:"Notify when appointment changes",eventType:"appointment.rescheduled",conditions:{appointmentStatus:"scheduled"},recipientRules:["appointment.participant"],templateIds:["template-1"],allowedChannels:["email"],timing:{mode:"immediate"},required:true});
-const rule=service.publishRule({principal:admin,ruleId:"rule-1"});
-assert.equal(rule.status,"published");
-assert.equal(rule.templateRefs[0].version,1);
+assert.equal(service.getRule({principal:admin,ruleId:"rule-1"}).templateRefs[0].version,1);
 assert.equal(service.listTemplates({principal:admin}).length,1);
 assert.equal(service.listRules({principal:admin}).length,1);
 assert.equal(service.listTemplates({principal:other}).length,0);

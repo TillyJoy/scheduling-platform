@@ -54,7 +54,14 @@ class NotificationConfigurationService {
     this.#requirePrincipal(principal);
     const item=args.version===undefined?this.#template(templateId):this.#templateVersion(templateId,args.version);
     this.#authorize(principal,ACTIONS.TEMPLATE_ARCHIVE,item.organizationId);
-    if(item.status==="published") throw new Error("Published template versions are immutable; create a new version instead");
+    if(item.status==="published") {
+      const activeRule=[...this.ruleStore.values()].find(rule=>
+        rule.organizationId===item.organizationId&&rule.status==="published"&&rule.enabled&&
+        (rule.templateRefs||(rule.templateIds||[]).map(id=>({templateId:id,version:null}))).some(ref=>ref.templateId===item.id&&(ref.version===null||ref.version===item.version))
+      );
+      if(activeRule) throw new Error("Cannot archive a published template version referenced by an enabled published rule; deactivate or archive the rule first");
+      throw new Error("Published template versions are immutable; create a new version instead");
+    }
     if(item.status==="archived") return item;
     const updated=new NotificationTemplate({...item,status:"archived",archivedAt:new Date(),updatedAt:new Date()});
     this.templateStore.set(item.id+":"+updated.version,updated);

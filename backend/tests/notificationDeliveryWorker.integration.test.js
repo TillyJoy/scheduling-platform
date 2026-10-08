@@ -213,4 +213,5 @@ test("durable notification delivery worker processes events, retries safely, and
     await outboxRepo.enqueue({principal:principalA,event:unauthorizedEvent,availableAt:now,db});
   });
   await assert.rejects(()=>workerWithoutDispatch.processOrganization(orgA),/Not authorized/);
+  await assert.rejects(()=>workerWithoutDispatch.processDeliveryAttempts(orgA),/Not authorized/);
 });

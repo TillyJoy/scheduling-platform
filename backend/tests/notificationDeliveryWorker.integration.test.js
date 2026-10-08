@@ -458,14 +458,15 @@ test("a new worker instance recovers persisted stale delivery and event leases a
   const eventResults=await workerAfterRestart.processOrganization(org);
   assert.equal(eventResults.length,1);
   assert.equal(eventResults[0].outboxId,outbox.id);
-  assert.equal(eventResults[0].status,"retry_scheduled");
+  // With no matching notification rule the event is safely published with no side effects.
+  assert.equal(eventResults[0].status,"published");
   const eventState=await tx(principal,"verify.event-recovered",db=>db.query(
-    "SELECT status,locked_at,attempts,available_at FROM event_outbox WHERE organization_id=$1 AND id=$2",[org,outbox.id]
+    "SELECT status,locked_at,attempts,published_at FROM event_outbox WHERE organization_id=$1 AND id=$2",[org,outbox.id]
   ));
-  assert.equal(eventState.rows[0].status,"failed");
+  assert.equal(eventState.rows[0].status,"published");
   assert.equal(eventState.rows[0].locked_at,null);
   assert.equal(eventState.rows[0].attempts,2);
-  assert.ok(new Date(eventState.rows[0].available_at).getTime() >= now.getTime());
+  assert.ok(eventState.rows[0].published_at);
 
   const deliveryResults=await workerAfterRestart.processDeliveryAttempts(org);
   assert.equal(deliveryResults.length,1);
@@ -479,8 +480,9 @@ test("a new worker instance recovers persisted stale delivery and event leases a
   });
   assert.equal(recoveredState.attempt.status,"delivered");
   assert.equal(recoveredState.attempt.lockedAt,null);
-  // Event failure remains separately retryable; delivery recovery does not publish an event.
-  assert.equal(recoveredState.eventRow.status,"failed");
+  // Event Outbox publication remains distinct from delivery-attempt dispatch.
+  assert.equal(recoveredState.eventRow.status,"published");
   assert.equal(recoveredState.eventRow.locked_at,null);
   assert.equal(recoveredState.eventRow.attempts,2);
+  assert.ok(recoveredState.eventRow.published_at);
 });

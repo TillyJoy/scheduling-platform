@@ -177,7 +177,7 @@ test("durable notification delivery worker processes events, retries safely, and
 
   const stale=await tx(principalA,"delivery.stale",db=>deliveryRepo.create({
     principal:principalA,attempt:{
-      id:"stale-"+suffix,notificationId:notifications.rows[0].id,channel:"email",provider:"fake",
+      id:"stale-"+suffix,notificationId:activeNotification.id,channel:"email",provider:"fake",
       status:"pending",attemptNumber:1,idempotencyKey:"stale-key-"+suffix,availableAt:now,lockedAt:new Date(now.getTime()-1),maxAttempts:3
     },db
   }));

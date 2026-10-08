@@ -43,6 +43,13 @@ class NotificationRepository {
     return result.rows.map(row=>this.#map(row));
   }
 
+  async findByDeliveryKey({ principal, deliveryKey, db=this.pool }) {
+    this.#requirePrincipal(principal);
+    if (!deliveryKey) return null;
+    const result=await db.query("SELECT * FROM notifications WHERE organization_id=$1 AND delivery_key=$2",[principal.organizationId,deliveryKey]);
+    return result.rows[0]?this.#map(result.rows[0]):null;
+  }
+
   async updateStatus({ principal, notificationId, status, timestamp=null, db=this.pool }) {
     this.#requirePrincipal(principal);
     const current=await this.get({principal,notificationId,db});

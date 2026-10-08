@@ -19,6 +19,14 @@ assert.equal(rule.status,"published");
 assert.equal(rule.templateRefs[0].version,1);
 assert.throws(()=>service.archiveTemplate({principal:admin,templateId:"template-1",version:1}),/cannot deactivate or archive.*enabled published rule/i);
 const activeRule=service.ruleStore.get("rule-1");
+
+const templateV2=service.createTemplateVersion({principal:admin,templateId:"template-1",input:{body:"Version two {{recipient.first_name}}"}});
+assert.equal(templateV2.version,2);
+assert.equal(templateV2.status,"draft");
+assert.equal(service.getTemplate({principal:admin,templateId:"template-1",version:1}).body,"Hello {{recipient.first_name}}, your appointment is now {{appointment.start_time}}.");
+const publishedV2=service.publishTemplate({principal:admin,templateId:"template-1",version:2});
+assert.equal(publishedV2.version,2);
+assert.equal(service.getRule({principal:admin,ruleId:"rule-1"}).templateRefs[0].version,1);
 service.ruleStore.set("rule-1",new (require("../src/models/notificationRule").NotificationRule)({...activeRule,status:"archived"}));
 const archivedTemplate=service.archiveTemplate({principal:admin,templateId:"template-1",version:1});
 assert.equal(archivedTemplate.status,"archived");
@@ -28,15 +36,7 @@ service.templateStore.set(deactivateTemplate.id+":"+deactivateTemplate.version,
   new (require("../src/models/notificationTemplate").NotificationTemplate)({...deactivateTemplate,status:"inactive"}));
 service.templateStore.set(deactivateTemplate.id,service.templateStore.get(deactivateTemplate.id+":"+deactivateTemplate.version));
 assert.equal(service.archiveTemplate({principal:admin,templateId:deactivateTemplate.id,version:1}).status,"archived");
-
-const templateV2=service.createTemplateVersion({principal:admin,templateId:"template-1",input:{body:"Version two {{recipient.first_name}}"}});
-assert.equal(templateV2.version,2);
-assert.equal(templateV2.status,"draft");
-assert.equal(service.getTemplate({principal:admin,templateId:"template-1",version:1}).body,"Hello {{recipient.first_name}}, your appointment is now {{appointment.start_time}}.");
-const publishedV2=service.publishTemplate({principal:admin,templateId:"template-1",version:2});
-assert.equal(publishedV2.version,2);
-assert.equal(service.getRule({principal:admin,ruleId:"rule-1"}).templateRefs[0].version,1);
-assert.equal(service.listTemplates({principal:admin}).length,2);
+assert.equal(service.listTemplates({principal:admin}).length,3);
 assert.equal(service.listRules({principal:admin}).length,1);
 assert.equal(service.listTemplates({principal:other}).length,0);
 assert.equal(service.listRules({principal:other}).length,0);

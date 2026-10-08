@@ -14,6 +14,11 @@ async function start() {
   if (databasePool) await runMigrations(databasePool);
   const state = createAppState({ authenticationService, databasePool });
   await ensureDurableDemoData(state);
+  const notificationWorkerOrganizations = (process.env.NOTIFICATION_WORKER_ORGANIZATIONS || "")
+    .split(",").map(value => value.trim()).filter(Boolean);
+  if (state.notificationDeliveryWorker && notificationWorkerOrganizations.length > 0) {
+    state.notificationDeliveryWorker.start(notificationWorkerOrganizations);
+  }
   const server = http.createServer(createHandler(state, { allowDevelopmentBypass }));
 
   server.listen(PORT, () => {

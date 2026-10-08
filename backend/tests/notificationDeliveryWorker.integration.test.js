@@ -1,0 +1,488 @@
+const assert=require("node:assert/strict");
+const test=require("node:test");
+const {randomUUID}=require("node:crypto");
+const {createDatabasePool,runMigrations,withTransaction}=require("../src/database");
+const {DomainEvent}=require("../src/models/domainEvent");
+const {NotificationRule}=require("../src/models/notificationRule");
+const {NotificationTemplate}=require("../src/models/notificationTemplate");
+const {DomainEventRepository}=require("../src/repositories/domainEventRepository");
+const {DomainEventOutboxRepository}=require("../src/repositories/domainEventOutboxRepository");
+const {NotificationRepository}=require("../src/repositories/notificationRepository");
+const {NotificationDeliveryAttemptRepository}=require("../src/repositories/notificationDeliveryAttemptRepository");
+const {NotificationService}=require("../src/services/notificationService");
+const {NotificationEventProcessor}=require("../src/services/notificationEventProcessor");
+const {NotificationDeliveryWorker}=require("../src/services/notificationDeliveryWorker");
+const {NotificationProviderRegistry}=require("../src/services/notificationProviderRegistry");
+
+const shouldRun=process.env.DATABASE_URL&&process.env.RUN_POSTGRES_TESTS==="1";
+
+test("durable notification delivery worker processes events, retries safely, and preserves tenant isolation",{skip:!shouldRun},async t=>{
+  const pool=createDatabasePool();
+  const suffix=randomUUID();
+  const orgA="worker-a-"+suffix,orgB="worker-b-"+suffix;
+  const role="worker_test_"+suffix.replace(/[^a-zA-Z0-9_]/g,"_");
+  const permissions=["event:emit","event:read","event:dispatch","notification:create","notification:read","notification:acknowledge","notification:dismiss","notification:manage"];
+  const principalA={userId:"worker-user-a-"+suffix,organizationId:orgA,permissions};
+  const principalB={userId:"worker-user-b-"+suffix,organizationId:orgB,permissions};
+  const workerPrincipal=organizationId=>({userId:"system-notification-worker",organizationId,permissions:["event:dispatch","notification:dispatch","notification:create"]});
+
+  await runMigrations(pool);
+  const tx=(principal,action,work)=>withTransaction(pool,{organizationId:principal.organizationId,userId:principal.userId,action},async db=>{
+    await db.query('SET LOCAL ROLE "'+role+'"');
+    return work(db);
+  });
+
+  const eventRepo=new DomainEventRepository({pool});
+  const outboxRepo=new DomainEventOutboxRepository({pool});
+  const notificationRepo=new NotificationRepository({pool});
+  const deliveryRepo=new NotificationDeliveryAttemptRepository({pool});
+  const notificationService=new NotificationService({notificationRepository:notificationRepo,transaction:tx});
+  const processorRules=new Map();
+  const templates=new Map();
+  const processor=new NotificationEventProcessor({ruleStore:processorRules,templateStore:templates,notificationService,deliveryAttemptRepository:deliveryRepo});
+  const providers=new NotificationProviderRegistry();
+  providers.register("email","fake",{send:async request=>({status:"success",providerMessageId:"provider-"+request.deliveryAttemptId})});
+
+  const fixedNow=new Date("2026-10-06T12:00:00.000Z");
+  let now=fixedNow;
+  const worker=new NotificationDeliveryWorker({
+    transaction:tx,outboxRepository:outboxRepo,eventRepository:eventRepo,
+    notificationEventProcessor:processor,notificationRepository:notificationRepo,
+    deliveryAttemptRepository:deliveryRepo,providerRegistry:providers.providers,
+    principalFactory:workerPrincipal,now:()=>now,batchSize:10,leaseMs:60000,maxAttempts:3,backoff:()=>1000
+  });
+
+  t.after(async()=>{
+    for(const org of [orgA,orgB])await tx({userId:"cleanup",organizationId:org},"test.cleanup",async db=>{
+      await db.query("DELETE FROM notification_delivery_attempts WHERE organization_id=$1",[org]);
+      await db.query("DELETE FROM notifications WHERE organization_id=$1",[org]);
+      await db.query("DELETE FROM event_outbox WHERE organization_id=$1",[org]);
+      await db.query("DELETE FROM domain_events WHERE organization_id=$1",[org]);
+      await db.query("DELETE FROM audit_events WHERE organization_id=$1",[org]);
+      await db.query("DELETE FROM organizations WHERE id=$1",[org]);
+    }).catch(()=>{});
+    await pool.query('DROP ROLE IF EXISTS "'+role+'"').catch(()=>{});
+    await pool.end();
+  });
+
+  await pool.query("INSERT INTO organizations(id,name) VALUES($1,$2),($3,$4)",[orgA,"Worker A",orgB,"Worker B"]);
+  await pool.query('CREATE ROLE "'+role+'" NOLOGIN NOSUPERUSER NOBYPASSRLS');
+  await pool.query('GRANT USAGE ON SCHEMA public TO "'+role+'"');
+  await pool.query('GRANT SELECT,INSERT,UPDATE,DELETE ON organizations,audit_events,domain_events,event_outbox,notifications,notification_delivery_attempts TO "'+role+'"');
+
+  const template=new NotificationTemplate({
+    id:"template-worker-"+suffix,organizationId:orgA,name:"In App Status",channel:"in_app",
+    subject:"{{newStatus}}",body:"Job {{entityId}} is {{newStatus}}.",variables:["entityId","newStatus"],status:"published"
+  });
+  const rule=new NotificationRule({
+    id:"rule-worker-"+suffix,organizationId:orgA,name:"In app status",eventType:"job.status.changed",
+    recipientRules:[{type:"event_payload",path:"recipientUserId"}],templateIds:[template.id],
+    allowedChannels:["in_app"],status:"published",enabled:true
+  });
+  templates.set(template.id,template);
+  processorRules.set(rule.id,rule);
+
+  const eventId="event-worker-"+suffix;
+  await tx(principalA,"event.emit",async db=>{
+    const event=new DomainEvent({
+      id:eventId,organizationId:orgA,eventType:"job.status.changed",entityType:"job",entityId:"job-1",
+      actorUserId:principalA.userId,payload:{newStatus:"ready",recipientUserId:principalA.userId}
+    });
+    await eventRepo.create({principal:principalA,event,db});
+    await outboxRepo.enqueue({principal:principalA,event,availableAt:fixedNow,db});
+  });
+
+  const first=await worker.processOrganization(orgA);
+  assert.equal(first.length,1);
+  assert.equal(first[0].status,"published");
+
+  const notifications=await tx(principalA,"notification.read",db=>db.query(
+    "SELECT id,organization_id,delivery_key FROM notifications WHERE organization_id=$1",[orgA]
+  ));
+  assert.equal(notifications.rows.length,1);
+
+  const attempts=await tx(principalA,"delivery.read",db=>db.query(
+    "SELECT id,status,attempt_number,available_at,locked_at,max_attempts FROM notification_delivery_attempts WHERE organization_id=$1 ORDER BY attempt_number",[orgA]
+  ));
+  assert.equal(attempts.rows.length,1);
+  assert.equal(attempts.rows[0].status,"delivered");
+  assert.equal(attempts.rows[0].attempt_number,1);
+
+  const retryAttempt=await tx(principalA,"delivery.retry-fixture",db=>deliveryRepo.create({
+    principal:principalA,
+    attempt:{
+      id:"retry-"+suffix,notificationId:notifications.rows[0].id,channel:"email",provider:"fake",status:"pending",
+      attemptNumber:1,idempotencyKey:"retry-key-"+suffix,availableAt:now,maxAttempts:3
+    },db
+  }));
+
+  const failingRegistry=new NotificationProviderRegistry();
+  let providerCalls=0;
+  failingRegistry.register("email","fake",{
+    async send(){
+      providerCalls+=1;
+      if(providerCalls===1)return{status:"failure",failureClass:"retryable",errorCode:"TEMPORARY",errorMessage:"temporary provider failure"};
+      return{status:"success",providerMessageId:"provider-retry"};
+    }
+  });
+  const retryWorker=new NotificationDeliveryWorker({
+    transaction:tx,outboxRepository:outboxRepo,eventRepository:eventRepo,
+    notificationEventProcessor:processor,notificationRepository:notificationRepo,
+    deliveryAttemptRepository:deliveryRepo,providerRegistry:failingRegistry.providers,
+    principalFactory:workerPrincipal,now:()=>now,batchSize:10,leaseMs:60000,maxAttempts:3,backoff:()=>1000
+  });
+
+  const firstDelivery=await retryWorker.processDeliveryAttempts(orgA);
+  assert.equal(firstDelivery.length,1);
+  assert.equal(firstDelivery[0].deliveryAttemptId,retryAttempt.id);
+  assert.equal(firstDelivery[0].status,"retry_scheduled");
+
+  const afterFailure=await tx(principalA,"delivery.read",db=>db.query(
+    "SELECT id,status,attempt_number,available_at,locked_at FROM notification_delivery_attempts WHERE organization_id=$1 ORDER BY attempt_number,id",[orgA]
+  ));
+  const failedRow=afterFailure.rows.find(r=>r.id===retryAttempt.id);
+  assert.equal(failedRow.status,"failed");
+  assert.equal(failedRow.attempt_number,1);
+  assert.equal(failedRow.locked_at,null);
+  assert.equal(new Date(failedRow.available_at).getTime(),now.getTime());
+
+  now=new Date(fixedNow.getTime()+1000);
+  const second=await retryWorker.processDeliveryAttempts(orgA);
+  assert.equal(second.length,1);
+  assert.equal(second[0].status,"delivered");
+  assert.equal(providerCalls,2);
+
+  const attemptsAfterSuccess=await tx(principalA,"delivery.read",db=>db.query(
+    "SELECT status,attempt_number FROM notification_delivery_attempts WHERE organization_id=$1 ORDER BY attempt_number,id",[orgA]
+  ));
+  assert.deepEqual(attemptsAfterSuccess.rows.map(r=>[r.status,r.attempt_number]),[["delivered",1],["failed",1],["delivered",2]]);
+
+  const activeNotification=await tx(principalA,"delivery.active-notification",db=>notificationRepo.create({
+    principal:principalA,
+    notification:new (require("../src/models/notification").Notification)({
+      id:"active-notification-"+suffix,organizationId:orgA,recipientId:principalA.userId,severity:"information",
+      title:"Active delivery",message:"Active delivery",type:"event",deliveryKey:"active-delivery-"+suffix
+    }),db
+  }));
+  const active=await tx(principalA,"delivery.active",db=>deliveryRepo.create({
+    principal:principalA,attempt:{
+      id:"active-"+suffix,notificationId:notifications.rows[0].id,channel:"sms",provider:"fake",
+      status:"pending",attemptNumber:1,idempotencyKey:"active-key-"+suffix,availableAt:now,maxAttempts:3
+    },db
+  }));
+  const claimedA=await tx(principalA,"delivery.claim-a",db=>deliveryRepo.claimBatch({principal:principalA,limit:1,now,leaseMs:60000,db}));
+  assert.ok(claimedA.some(a=>a.id===active.id));
+  const claimedB=await tx(principalA,"delivery.claim-b",db=>deliveryRepo.claimBatch({principal:principalA,limit:10,now,leaseMs:60000,db}));
+  assert.equal(claimedB.some(a=>a.id===active.id),false);
+
+  const stale=await tx(principalA,"delivery.stale",db=>deliveryRepo.create({
+    principal:principalA,attempt:{
+      id:"stale-"+suffix,notificationId:activeNotification.id,channel:"email",provider:"fake",
+      status:"pending",attemptNumber:1,idempotencyKey:"stale-key-"+suffix,availableAt:now,lockedAt:new Date(now.getTime()-1),maxAttempts:3
+    },db
+  }));
+  const recovered=await tx(principalA,"delivery.recover",db=>deliveryRepo.recoverStale({principal:principalA,now:new Date(now.getTime()+1),db}));
+  assert.ok(recovered.some(a=>a.id===stale.id));
+  const staleRow=await tx(principalA,"delivery.stale.read",db=>deliveryRepo.get({principal:principalA,deliveryAttemptId:stale.id,db}));
+  assert.equal(staleRow.lockedAt,null);
+
+  const isolated=await tx(principalB,"isolation",db=>Promise.all([
+    db.query("SELECT id FROM notifications"),
+    db.query("SELECT id FROM notification_delivery_attempts"),
+    db.query("SELECT id FROM event_outbox")
+  ]));
+  assert.deepEqual(isolated.map(r=>r.rows),[[],[],[]]);
+
+  const crossTenant=await tx(principalB,"cross-tenant",db=>deliveryRepo.get({principal:principalB,deliveryAttemptId:active.id,db}));
+  assert.equal(crossTenant,null);
+
+  const workerWithoutDispatch=new NotificationDeliveryWorker({
+    transaction:tx,outboxRepository:outboxRepo,eventRepository:eventRepo,
+    notificationEventProcessor:processor,notificationRepository:notificationRepo,
+    deliveryAttemptRepository:deliveryRepo,providerRegistry:providers.providers,
+    principalFactory:()=>({userId:"unauthorized-worker",organizationId:orgA,permissions:[]}),
+    now:()=>now
+  });
+  const unauthorizedEvent=new DomainEvent({
+    id:"unauthorized-event-"+suffix,organizationId:orgA,eventType:"job.status.changed",
+    entityType:"job",entityId:"job-unauthorized",actorUserId:principalA.userId,
+    payload:{newStatus:"ready",recipientUserId:principalA.userId}
+  });
+  await tx(principalA,"event.unauthorized-fixture",async db=>{
+    await eventRepo.create({principal:principalA,event:unauthorizedEvent,db});
+    await outboxRepo.enqueue({principal:principalA,event:unauthorizedEvent,availableAt:now,db});
+  });
+  await assert.rejects(()=>workerWithoutDispatch.processOrganization(orgA),/Not authorized/);
+  await assert.rejects(()=>workerWithoutDispatch.processDeliveryAttempts(orgA),/Not authorized/);
+});
+
+
+test("notification delivery claims skip rows locked by another PostgreSQL transaction",{skip:!shouldRun},async t=>{
+  const pool=createDatabasePool({databaseUrl:process.env.DATABASE_URL,ssl:process.env.DATABASE_SSL==="false"?false:{rejectUnauthorized:true},max:4,idleTimeoutMillis:30000,connectionTimeoutMillis:5000});
+  const suffix=randomUUID(),org="worker-concurrent-"+suffix,role="worker_concurrent_"+suffix.replace(/[^a-zA-Z0-9_]/g,"_");
+  const principal={userId:"worker-concurrent-user-"+suffix,organizationId:org,permissions:["notification:dispatch"]};
+  const notificationId="concurrent-notification-"+suffix,attemptId="concurrent-attempt-"+suffix;
+  await runMigrations(pool);
+  const tx=(p,action,work)=>withTransaction(pool,{organizationId:p.organizationId,userId:p.userId,action},async db=>{
+    await db.query('SET LOCAL ROLE "'+role+'"');
+    return work(db);
+  });
+  const repo=new NotificationDeliveryAttemptRepository({pool});
+  t.after(async()=>{
+    await tx({...principal,userId:"cleanup"},"test.cleanup",async db=>{
+      await db.query("DELETE FROM notification_delivery_attempts WHERE organization_id=$1",[org]);
+      await db.query("DELETE FROM notifications WHERE organization_id=$1",[org]);
+      await db.query("DELETE FROM organizations WHERE id=$1",[org]);
+    }).catch(()=>{});
+    await pool.query('DROP ROLE IF EXISTS "'+role+'"').catch(()=>{});
+    await pool.end();
+  });
+  await pool.query("INSERT INTO organizations(id,name) VALUES($1,$2)",[org,"Concurrent Worker"]);
+  await pool.query('CREATE ROLE "'+role+'" NOLOGIN NOSUPERUSER NOBYPASSRLS');
+  await pool.query('GRANT USAGE ON SCHEMA public TO "'+role+'"');
+  await pool.query('GRANT SELECT,INSERT,UPDATE,DELETE ON organizations,notifications,notification_delivery_attempts TO "'+role+'"');
+  await tx(principal,"fixture.create",async db=>{
+    await new NotificationRepository({pool}).create({principal,notification:new (require("../src/models/notification").Notification)({
+      id:notificationId,organizationId:org,recipientId:principal.userId,title:"Concurrent claim",message:"Lease safely"
+    }),db});
+    await repo.create({principal,attempt:{
+      id:attemptId,notificationId,channel:"email",provider:"fake",status:"pending",attemptNumber:1,
+      idempotencyKey:"concurrent-key-"+suffix,availableAt:new Date("2026-10-06T12:00:00.000Z"),maxAttempts:3
+    },db});
+  });
+
+  const client=await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT set_config('app.organization_id',$1,true)",[org]);
+    await client.query("SELECT set_config('app.user_id',$1,true)",[principal.userId]);
+    await client.query("SELECT set_config('app.action',$1,true)",["test.concurrent.claim"]);
+    await client.query('SET LOCAL ROLE "'+role+'"');
+    const locked=await client.query(
+      "SELECT id FROM notification_delivery_attempts WHERE organization_id=$1 AND id=$2 FOR UPDATE",
+      [org,attemptId]
+    );
+    assert.equal(locked.rowCount,1);
+
+    // This claim must use a separate pool connection/transaction while the row lock remains held.
+    const concurrentClaim=await tx(principal,"claim.contending",db=>repo.claimBatch({
+      principal,limit:1,now:new Date("2026-10-06T12:00:00.000Z"),leaseMs:60000,db
+    }));
+    assert.equal(concurrentClaim.some(attempt=>attempt.id===attemptId),false);
+
+    await client.query("COMMIT");
+    const subsequentClaim=await tx(principal,"claim.after-release",db=>repo.claimBatch({
+      principal,limit:1,now:new Date("2026-10-06T12:00:00.000Z"),leaseMs:60000,db
+    }));
+    assert.equal(subsequentClaim.filter(attempt=>attempt.id===attemptId).length,1);
+  } catch(error) {
+    try { await client.query("ROLLBACK"); } catch {}
+    throw error;
+  } finally {
+    client.release();
+  }
+});
+
+
+test("delivery worker stops at max attempts and never retries a permanent provider rejection",{skip:!shouldRun},async t=>{
+  const pool=createDatabasePool();
+  const suffix=randomUUID(),org="worker-retry-edges-"+suffix,role="worker_retry_edges_"+suffix.replace(/[^a-zA-Z0-9_]/g,"_");
+  const principal={userId:"worker-retry-user-"+suffix,organizationId:org,permissions:["notification:dispatch","notification:create"]};
+  const workerPrincipal=organizationId=>({userId:"system-worker-"+suffix,organizationId,permissions:["event:dispatch","notification:dispatch","notification:create"]});
+  let now=new Date("2026-10-06T12:00:00.000Z");
+  await runMigrations(pool);
+  const tx=(p,action,work)=>withTransaction(pool,{organizationId:p.organizationId,userId:p.userId,action},async db=>{
+    await db.query('SET LOCAL ROLE "'+role+'"');
+    return work(db);
+  });
+  const notificationRepo=new NotificationRepository({pool});
+  const deliveryRepo=new NotificationDeliveryAttemptRepository({pool});
+  const eventRepo=new DomainEventRepository({pool});
+  const outboxRepo=new DomainEventOutboxRepository({pool});
+  const processor=new NotificationEventProcessor({ruleStore:new Map(),templateStore:new Map(),notificationService:new NotificationService({notificationRepository:notificationRepo,transaction:tx}),deliveryAttemptRepository:deliveryRepo});
+  t.after(async()=>{
+    await tx({...principal,userId:"cleanup"},"test.cleanup",async db=>{
+      await db.query("DELETE FROM notification_delivery_attempts WHERE organization_id=$1",[org]);
+      await db.query("DELETE FROM notifications WHERE organization_id=$1",[org]);
+      await db.query("DELETE FROM event_outbox WHERE organization_id=$1",[org]);
+      await db.query("DELETE FROM domain_events WHERE organization_id=$1",[org]);
+      await db.query("DELETE FROM audit_events WHERE organization_id=$1",[org]);
+      await db.query("DELETE FROM organizations WHERE id=$1",[org]);
+    }).catch(()=>{});
+    await pool.query('DROP ROLE IF EXISTS "'+role+'"').catch(()=>{});
+    await pool.end();
+  });
+  await pool.query("INSERT INTO organizations(id,name) VALUES($1,$2)",[org,"Worker Retry Edges"]);
+  await pool.query('CREATE ROLE "'+role+'" NOLOGIN NOSUPERUSER NOBYPASSRLS');
+  await pool.query('GRANT USAGE ON SCHEMA public TO "'+role+'"');
+  await pool.query('GRANT SELECT,INSERT,UPDATE,DELETE ON organizations,audit_events,domain_events,event_outbox,notifications,notification_delivery_attempts TO "'+role+'"');
+
+  const notification=await tx(principal,"fixture.notification",db=>notificationRepo.create({principal,notification:new (require("../src/models/notification").Notification)({
+    id:"retry-edge-notification-"+suffix,organizationId:org,recipientId:principal.userId,title:"Retry terminal cases",message:"Verify bounded delivery"
+  }),db}));
+  const exhausted=await tx(principal,"fixture.exhausted",db=>deliveryRepo.create({principal,attempt:{
+    id:"exhausted-"+suffix,notificationId:notification.id,channel:"email",provider:"retryable",status:"pending",
+    attemptNumber:2,idempotencyKey:"exhausted-key-"+suffix,availableAt:now,maxAttempts:2
+  },db}));
+  const permanent=await tx(principal,"fixture.permanent",db=>deliveryRepo.create({principal,attempt:{
+    id:"permanent-"+suffix,notificationId:notification.id,channel:"sms",provider:"permanent",status:"pending",
+    attemptNumber:1,idempotencyKey:"permanent-key-"+suffix,availableAt:now,maxAttempts:3
+  },db}));
+
+  let retryableCalls=0,permanentCalls=0;
+  const providers=new NotificationProviderRegistry();
+  providers.register("email","retryable",{send:async()=>{retryableCalls+=1;return{status:"failure",failureClass:"retryable",errorCode:"TEMP",errorMessage:"still temporary"};}});
+  providers.register("sms","permanent",{send:async()=>{permanentCalls+=1;return{status:"failure",failureClass:"permanent",errorCode:"INVALID_RECIPIENT",errorMessage:"recipient rejected"};}});
+  const worker=new NotificationDeliveryWorker({
+    transaction:tx,outboxRepository:outboxRepo,eventRepository:eventRepo,notificationEventProcessor:processor,
+    notificationRepository:notificationRepo,deliveryAttemptRepository:deliveryRepo,providerRegistry:providers.providers,
+    principalFactory:workerPrincipal,now:()=>now,leaseMs:1000,maxAttempts:3,backoff:()=>100
+  });
+
+  const results=await worker.processDeliveryAttempts(org);
+  assert.equal(results.length,2);
+  assert.deepEqual(results.map(result=>result.status),["failed","failed"]);
+  const exhaustedResult=results.find(result=>result.deliveryAttemptId===exhausted.id);
+  const permanentResult=results.find(result=>result.deliveryAttemptId===permanent.id);
+  assert.equal(exhaustedResult.terminal,true);
+  assert.equal(exhaustedResult.failureClass,"retryable");
+  assert.equal(permanentResult.terminal,true);
+  assert.equal(permanentResult.failureClass,"permanent");
+  assert.equal(retryableCalls,1);
+  assert.equal(permanentCalls,1);
+
+  const persisted=await tx(principal,"verify.terminal",db=>deliveryRepo.listForNotification({principal,notificationId:notification.id,db}));
+  const exhaustedRows=persisted.filter(attempt=>attempt.channel==="email");
+  const permanentRows=persisted.filter(attempt=>attempt.channel==="sms");
+  assert.equal(exhaustedRows.length,1);
+  assert.equal(exhaustedRows[0].id,exhausted.id);
+  assert.equal(exhaustedRows[0].status,"failed");
+  assert.equal(exhaustedRows[0].attemptNumber,2);
+  assert.equal(exhaustedRows[0].maxAttempts,2);
+  assert.equal(exhaustedRows[0].lockedAt,null);
+  assert.equal(exhaustedRows[0].metadata.failureClass,"retryable");
+  assert.equal(permanentRows.length,1);
+  assert.equal(permanentRows[0].id,permanent.id);
+  assert.equal(permanentRows[0].status,"failed");
+  assert.equal(permanentRows[0].attemptNumber,1);
+  assert.equal(permanentRows[0].metadata.failureClass,"permanent");
+  assert.equal(permanentRows[0].errorCode,"INVALID_RECIPIENT");
+
+  now=new Date(now.getTime()+100000);
+  const nextPoll=await worker.processDeliveryAttempts(org);
+  assert.equal(nextPoll.length,0);
+  assert.equal(retryableCalls,1);
+  assert.equal(permanentCalls,1);
+  assert.equal((await tx(principal,"verify.no-retries",db=>deliveryRepo.listForNotification({principal,notificationId:notification.id,db}))).length,2);
+});
+
+
+test("a new worker instance recovers persisted stale delivery and event leases after restart",{skip:!shouldRun},async t=>{
+  const pool=createDatabasePool();
+  const suffix=randomUUID(),org="worker-restart-"+suffix,role="worker_restart_"+suffix.replace(/[^a-zA-Z0-9_]/g,"_");
+  const principal={userId:"worker-restart-user-"+suffix,organizationId:org,permissions:["event:emit","event:read","event:dispatch","notification:create","notification:read","notification:dispatch","notification:manage"]};
+  const workerPrincipal=organizationId=>({userId:"system-restart-worker-"+suffix,organizationId,permissions:["event:dispatch","notification:dispatch","notification:create"]});
+  let now=new Date("2026-10-06T12:00:00.000Z");
+  await runMigrations(pool);
+  const tx=(p,action,work)=>withTransaction(pool,{organizationId:p.organizationId,userId:p.userId,action},async db=>{
+    await db.query('SET LOCAL ROLE "'+role+'"');
+    return work(db);
+  });
+  const eventRepo=new DomainEventRepository({pool}),outboxRepo=new DomainEventOutboxRepository({pool});
+  const notificationRepo=new NotificationRepository({pool}),deliveryRepo=new NotificationDeliveryAttemptRepository({pool});
+  const notificationService=new NotificationService({notificationRepository:notificationRepo,transaction:tx});
+  const processor=new NotificationEventProcessor({ruleStore:new Map(),templateStore:new Map(),notificationService,deliveryAttemptRepository:deliveryRepo});
+  const providers=new NotificationProviderRegistry();
+  providers.register("email","fake",{send:async request=>({status:"success",providerMessageId:"restart-provider-"+request.deliveryAttemptId})});
+  t.after(async()=>{
+    await tx({...principal,userId:"cleanup"},"test.cleanup",async db=>{
+      await db.query("DELETE FROM notification_delivery_attempts WHERE organization_id=$1",[org]);
+      await db.query("DELETE FROM notifications WHERE organization_id=$1",[org]);
+      await db.query("DELETE FROM event_outbox WHERE organization_id=$1",[org]);
+      await db.query("DELETE FROM domain_events WHERE organization_id=$1",[org]);
+      await db.query("DELETE FROM audit_events WHERE organization_id=$1",[org]);
+      await db.query("DELETE FROM organizations WHERE id=$1",[org]);
+    }).catch(()=>{});
+    await pool.query('DROP ROLE IF EXISTS "'+role+'"').catch(()=>{});
+    await pool.end();
+  });
+  await pool.query("INSERT INTO organizations(id,name) VALUES($1,$2)",[org,"Worker Restart"]);
+  await pool.query('CREATE ROLE "'+role+'" NOLOGIN NOSUPERUSER NOBYPASSRLS');
+  await pool.query('GRANT USAGE ON SCHEMA public TO "'+role+'"');
+  await pool.query('GRANT SELECT,INSERT,UPDATE,DELETE ON organizations,audit_events,domain_events,event_outbox,notifications,notification_delivery_attempts TO "'+role+'"');
+
+  const notification=await tx(principal,"fixture.notification",db=>notificationRepo.create({principal,notification:new (require("../src/models/notification").Notification)({
+    id:"restart-notification-"+suffix,organizationId:org,recipientId:principal.userId,title:"Restart recovery",message:"Lease recovery is durable"
+  }),db}));
+  const delivery=await tx(principal,"fixture.delivery",db=>deliveryRepo.create({principal,attempt:{
+    id:"restart-delivery-"+suffix,notificationId:notification.id,channel:"email",provider:"fake",status:"pending",attemptNumber:1,
+    idempotencyKey:"restart-delivery-key-"+suffix,availableAt:now,lockedAt:new Date(now.getTime()+500),maxAttempts:3
+  },db}));
+  const event=new DomainEvent({id:"restart-event-"+suffix,organizationId:org,eventType:"job.status.changed",entityType:"job",entityId:"restart-job",
+    actorUserId:principal.userId,payload:{newStatus:"ready",recipientUserId:principal.userId}});
+  const outbox=await tx(principal,"fixture.event",async db=>{
+    await eventRepo.create({principal,event,db});
+    return outboxRepo.enqueue({principal,event,availableAt:now,db});
+  });
+  const eventLease=new Date(now.getTime()+500);
+  await tx(principal,"fixture.event-lease",db=>db.query(
+    "UPDATE event_outbox SET status='processing',attempts=1,locked_at=$3 WHERE organization_id=$1 AND id=$2",
+    [org,outbox.id,eventLease]
+  ));
+
+  // A separate worker instance is created later; the leased state survives in PostgreSQL.
+  const workerBeforeRestart=new NotificationDeliveryWorker({
+    transaction:tx,outboxRepository:outboxRepo,eventRepository:eventRepo,notificationEventProcessor:processor,
+    notificationRepository:notificationRepo,deliveryAttemptRepository:deliveryRepo,providerRegistry:providers.providers,
+    principalFactory:workerPrincipal,now:()=>now,leaseMs:1000,maxAttempts:3,backoff:()=>100
+  });
+  assert.equal(workerBeforeRestart.running,false);
+  const persistedBeforeRestart=await tx(principal,"verify.persisted-leases",async db=>{
+    const attempt=await deliveryRepo.get({principal,deliveryAttemptId:delivery.id,db});
+    const eventRows=await db.query("SELECT status,locked_at,attempts FROM event_outbox WHERE organization_id=$1 AND id=$2",[org,outbox.id]);
+    return {attempt,eventRow:eventRows.rows[0]};
+  });
+  assert.ok(persistedBeforeRestart.attempt.lockedAt);
+  assert.equal(persistedBeforeRestart.eventRow.status,"processing");
+  assert.ok(persistedBeforeRestart.eventRow.locked_at);
+  await workerBeforeRestart.stop();
+
+  now=new Date(now.getTime()+2000);
+  const workerAfterRestart=new NotificationDeliveryWorker({
+    transaction:tx,outboxRepository:outboxRepo,eventRepository:eventRepo,notificationEventProcessor:processor,
+    notificationRepository:notificationRepo,deliveryAttemptRepository:deliveryRepo,providerRegistry:providers.providers,
+    principalFactory:workerPrincipal,now:()=>now,leaseMs:1000,maxAttempts:3,backoff:()=>100
+  });
+  assert.notEqual(workerAfterRestart,workerBeforeRestart);
+
+  const eventResults=await workerAfterRestart.processOrganization(org);
+  assert.equal(eventResults.length,1);
+  assert.equal(eventResults[0].outboxId,outbox.id);
+  // With no matching notification rule the event is safely published with no side effects.
+  assert.equal(eventResults[0].status,"published");
+  const eventState=await tx(principal,"verify.event-recovered",db=>db.query(
+    "SELECT status,locked_at,attempts,published_at FROM event_outbox WHERE organization_id=$1 AND id=$2",[org,outbox.id]
+  ));
+  assert.equal(eventState.rows[0].status,"published");
+  assert.equal(eventState.rows[0].locked_at,null);
+  assert.equal(eventState.rows[0].attempts,2);
+  assert.ok(eventState.rows[0].published_at);
+
+  const deliveryResults=await workerAfterRestart.processDeliveryAttempts(org);
+  assert.equal(deliveryResults.length,1);
+  assert.equal(deliveryResults[0].deliveryAttemptId,delivery.id);
+  assert.equal(deliveryResults[0].status,"delivered");
+
+  const recoveredState=await tx(principal,"verify.recovered-after-restart",async db=>{
+    const attempt=await deliveryRepo.get({principal,deliveryAttemptId:delivery.id,db});
+    const eventRows=await db.query("SELECT status,locked_at,attempts,published_at FROM event_outbox WHERE organization_id=$1 AND id=$2",[org,outbox.id]);
+    return {attempt,eventRow:eventRows.rows[0]};
+  });
+  assert.equal(recoveredState.attempt.status,"delivered");
+  assert.equal(recoveredState.attempt.lockedAt,null);
+  // Event Outbox publication remains distinct from delivery-attempt dispatch.
+  assert.equal(recoveredState.eventRow.status,"published");
+  assert.equal(recoveredState.eventRow.locked_at,null);
+  assert.equal(recoveredState.eventRow.attempts,2);
+  assert.ok(recoveredState.eventRow.published_at);
+});

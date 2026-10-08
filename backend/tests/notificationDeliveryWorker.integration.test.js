@@ -166,7 +166,7 @@ test("durable notification delivery worker processes events, retries safely, and
   }));
   const active=await tx(principalA,"delivery.active",db=>deliveryRepo.create({
     principal:principalA,attempt:{
-      id:"active-"+suffix,notificationId:activeNotification.id,channel:"email",provider:"fake",
+      id:"active-"+suffix,notificationId:notifications.rows[0].id,channel:"sms",provider:"fake",
       status:"pending",attemptNumber:1,idempotencyKey:"active-key-"+suffix,availableAt:now,maxAttempts:3
     },db
   }));

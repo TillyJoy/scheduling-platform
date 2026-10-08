@@ -50,11 +50,11 @@ class NotificationTemplateRepository {
     this.#requirePrincipal(principal);
     const current=await this.getVersion({principal,templateId,version,db});
     if(!current) throw new Error("Notification template version not found");
-    if(current.status==="published") throw new Error("Published template versions are immutable; create a new version instead");
     if(current.status==="archived") return current;
+    if(!["draft","inactive","published"].includes(current.status)) throw new Error("Only active template versions can be archived");
     const result=await db.query(
       `UPDATE notification_templates SET status='archived',archived_at=$4,updated_at=$4
-       WHERE organization_id=$1 AND template_id=$2 AND version=$3 AND status IN ('draft','inactive') RETURNING *`,
+       WHERE organization_id=$1 AND template_id=$2 AND version=$3 AND status IN ('draft','inactive','published') RETURNING *`,
       [principal.organizationId,templateId,version,this.clock()]
     );
     if(!result.rows[0]) throw new Error("Notification template version changed concurrently");

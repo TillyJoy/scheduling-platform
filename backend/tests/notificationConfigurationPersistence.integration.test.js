@@ -121,7 +121,7 @@ test("durable notification configuration pins versions, survives fresh instances
   // An enabled published rule protects its exact template dependency from archival.
   await assert.rejects(
     ()=>services.configurationService.archiveTemplate({principal:principalA,templateId:templateV1.id,version:1}),
-    /cannot archive.*enabled published rule/i
+    /cannot deactivate or archive.*enabled published rule/i
   );
   // Temporary inactivation remains a distinct lifecycle state and can be restored.
   await assert.rejects(()=>transaction(principalA,"template.temporary-inactive",db=>db.query(

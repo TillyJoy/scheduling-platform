@@ -13,7 +13,7 @@ class NotificationConfigurationService {
     templateStore=new Map(),ruleStore=new Map(),auditStore=[],authorize=NotificationConfigurationService.defaultAuthorize,
     templateRepository=null,ruleRepository=null,auditRepository=null,transaction=null
   }={}) {
-    if((templateRepository||ruleRepository)&&(!templateRepository||!ruleRepository||!transaction)) throw new Error("Durable notification configuration requires both repositories and a transaction");
+    if((templateRepository||ruleRepository)&&(!templateRepository||!ruleRepository||!transaction||!auditRepository)) throw new Error("Durable notification configuration requires both repositories, required audit persistence, and a transaction");
     this.templateStore=templateStore;this.ruleStore=ruleStore;this.auditStore=auditStore;this.authorize=authorize;
     this.templateRepository=templateRepository;this.ruleRepository=ruleRepository;this.auditRepository=auditRepository;this.transaction=transaction;
     this.durable=Boolean(templateRepository&&ruleRepository&&transaction);
@@ -258,7 +258,7 @@ class NotificationConfigurationService {
     return this.transaction(principal,"notification.configuration.rule.read",db=>this.ruleRepository.get({principal,ruleId,db}));
   }
   async #durableAudit(principal,action,entityType,entityId,newValue,db) {
-    if(!this.auditRepository) return;
+    if(!this.auditRepository) throw new Error("Durable notification configuration requires audit persistence");
     await this.auditRepository.create({principal,event:{id:crypto.randomUUID(),organizationId:principal.organizationId,action,entityType,entityId,newValue,source:"application"},db});
   }
 

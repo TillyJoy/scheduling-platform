@@ -1,5 +1,6 @@
 const { Notification, SEVERITIES } = require("../models/notification");
 const { AuditEvent } = require("../models/auditEvent");
+const crypto = require("node:crypto");
 
 const ACTIONS = Object.freeze({ CREATE:"notification:create", READ:"notification:read", ACKNOWLEDGE:"notification:acknowledge", DISMISS:"notification:dismiss" });
 
@@ -76,7 +77,7 @@ class NotificationService {
       this.#authorize(principal,permission,{organizationId:current.organizationId,recipientId:current.recipientId});
       const updated=await this.notificationRepository.updateStatus({principal,notificationId,status,db});
       if(this.auditRepository) await this.auditRepository.create({principal,event:{
-        id:action+":"+updated.id+":"+String(Date.now()),organizationId:principal.organizationId,action,
+        id:action+":"+updated.id+":"+crypto.randomUUID(),organizationId:principal.organizationId,action,
         entityType:"notification",entityId:updated.id,previousValue:{status:current.status},newValue:{status:updated.status},source:"application"
       },db});
       return updated;

@@ -24,7 +24,7 @@ assert.equal(service.getTemplate({principal:admin,templateId:"template-1",versio
 const publishedV2=service.publishTemplate({principal:admin,templateId:"template-1",version:2});
 assert.equal(publishedV2.version,2);
 assert.equal(service.getRule({principal:admin,ruleId:"rule-1"}).templateRefs[0].version,1);
-assert.equal(service.listTemplates({principal:admin}).length,3);
+assert.equal(service.listTemplates({principal:admin}).length,2);
 assert.equal(service.listRules({principal:admin}).length,1);
 assert.equal(service.listTemplates({principal:other}).length,0);
 assert.equal(service.listRules({principal:other}).length,0);

@@ -27,7 +27,8 @@ class NotificationConfigurationService {
     this.#authorize(principal,ACTIONS.TEMPLATE_CREATE,item.organizationId);
     this.#reject(this.templateStore,item.id);
     if(item.status!=="draft") throw new Error("Templates must be created as drafts");
-    this.templateStore.set(item.id,item);
+    this.templateStore.set(item.id+":"+item.version,item);
+    if(item.version===1) this.templateStore.set(item.id,item);
     this.#audit(item.organizationId,principal.userId,"notification_template.created","notification_template",item.id,{version:item.version,status:item.status});
     return item;
   }
@@ -36,11 +37,12 @@ class NotificationConfigurationService {
     if(this.durable) return this.#durablePublishTemplate(args);
     const {principal,templateId,version=null}=args;
     this.#requirePrincipal(principal);
-    const item=this.#template(templateId);
+    const item=version===null?this.#template(templateId):this.#templateVersion(templateId,version);
     this.#authorize(principal,ACTIONS.TEMPLATE_PUBLISH,item.organizationId);
     if(item.status!=="draft") throw new Error("Only draft template versions can be published");
-    const updated=new NotificationTemplate({...item,version:version??item.version,status:"published",publishedAt:new Date(),updatedAt:new Date()});
-    this.templateStore.set(item.id,updated);
+    const updated=new NotificationTemplate({...item,status:"published",publishedAt:new Date(),updatedAt:new Date()});
+    this.templateStore.set(item.id+":"+updated.version,updated);
+    if(!this.templateStore.has(item.id)||this.templateStore.get(item.id).version<=updated.version) this.templateStore.set(item.id,updated);
     this.#audit(item.organizationId,principal.userId,"notification_template.published","notification_template",item.id,{version:updated.version});
     return updated;
   }
@@ -49,12 +51,13 @@ class NotificationConfigurationService {
     if(this.durable) return this.#durableArchiveTemplate(args);
     const {principal,templateId}=args;
     this.#requirePrincipal(principal);
-    const item=this.#template(templateId);
+    const item=args.version===undefined?this.#template(templateId):this.#templateVersion(templateId,args.version);
     this.#authorize(principal,ACTIONS.TEMPLATE_ARCHIVE,item.organizationId);
     if(item.status==="published") throw new Error("Published template versions are immutable; create a new version instead");
     if(item.status==="archived") return item;
     const updated=new NotificationTemplate({...item,status:"archived",archivedAt:new Date(),updatedAt:new Date()});
-    this.templateStore.set(item.id,updated);
+    this.templateStore.set(item.id+":"+updated.version,updated);
+    if(this.templateStore.get(item.id)?.version===updated.version) this.templateStore.set(item.id,updated);
     this.#audit(item.organizationId,principal.userId,"notification_template.archived","notification_template",item.id,{version:item.version});
     return updated;
   }
@@ -63,10 +66,12 @@ class NotificationConfigurationService {
     if(this.durable) return this.#durableCreateTemplateVersion(args);
     const {principal,templateId,input={}}=args;
     this.#requirePrincipal(principal);
-    const current=this.#template(templateId);
+    const current=args.sourceVersion===undefined?this.#template(templateId):this.#templateVersion(templateId,args.sourceVersion);
     this.#authorize(principal,ACTIONS.TEMPLATE_CREATE,current.organizationId);
     if(current.status!=="published") throw new Error("Only a published template can be versioned");
-    const next=new NotificationTemplate({...current,...input,id:current.id,organizationId:current.organizationId,version:current.version+1,status:"draft",publishedAt:null,archivedAt:null,createdAt:new Date(),updatedAt:new Date()});
+    const versions=[...this.templateStore.values()].filter(x=>x.id===current.id);
+    const next=new NotificationTemplate({...current,...input,id:current.id,organizationId:current.organizationId,version:Math.max(...versions.map(x=>x.version),current.version)+1,status:"draft",publishedAt:null,archivedAt:null,createdAt:new Date(),updatedAt:new Date()});
+    this.templateStore.set(next.id+":"+next.version,next);
     this.templateStore.set(next.id,next);
     this.#audit(next.organizationId,principal.userId,"notification_template.version_created","notification_template",next.id,{version:next.version,sourceVersion:current.version});
     return next;
@@ -80,9 +85,10 @@ class NotificationConfigurationService {
     this.#authorize(principal,ACTIONS.RULE_CREATE,item.organizationId);
     this.#reject(this.ruleStore,item.id);
     const refs=item.templateRefs.map(ref=>{
-      const template=this.templateStore.get(ref.templateId);
+      const template=ref.version===null?this.templateStore.get(ref.templateId):this.#templateVersion(ref.templateId,ref.version);
       if(!template||template.organizationId!==item.organizationId) throw new Error("Rule references an invalid notification template");
       if(ref.version!==null && ref.version!==template.version) throw new Error("Rule references an invalid notification template version");
+      if(template.status!=="published") throw new Error("Rules must reference published template versions");
       return {templateId:ref.templateId,version:ref.version??template.version};
     });
     this.ruleStore.set(item.id,new NotificationRule({...item,templateRefs:refs,templateIds:undefined}));
@@ -97,7 +103,7 @@ class NotificationConfigurationService {
     const item=this.#rule(ruleId);
     this.#authorize(principal,ACTIONS.RULE_PUBLISH,item.organizationId);
     for(const ref of item.templateRefs) {
-      const template=this.templateStore.get(ref.templateId);
+      const template=this.#templateVersion(ref.templateId,ref.version);
       if(!template||template.organizationId!==item.organizationId||template.status!=="published"||template.version!==ref.version) {
         throw new Error("All rule templates must reference a valid published template version before the rule can be published");
       }
@@ -125,7 +131,7 @@ class NotificationConfigurationService {
   listTemplates({principal,includeVersions=true}) {
     this.#requirePrincipal(principal);this.#authorize(principal,ACTIONS.READ,principal.organizationId);
     if(this.durable) return this.#durableListTemplates({principal,includeVersions});
-    const rows=[...this.templateStore.values()].filter(x=>x.organizationId===principal.organizationId);
+    const rows=[...new Map([...this.templateStore.values()].filter(x=>x.organizationId===principal.organizationId).map(x=>[x.id+":"+x.version,x])).values()];
     return includeVersions?rows:rows.filter(x=>x.version===Math.max(...rows.filter(y=>y.id===x.id).map(y=>y.version)));
   }
 
@@ -252,7 +258,8 @@ class NotificationConfigurationService {
     await this.auditRepository.create({principal,event:{id:crypto.randomUUID(),organizationId:principal.organizationId,action,entityType,entityId,newValue,source:"application"},db});
   }
 
-  #template(id){const x=this.templateStore.get(id);if(!x)throw new Error("Notification template not found");return x;}
+  #template(id){const versions=[...this.templateStore.values()].filter(x=>x.id===id);const x=versions.sort((a,b)=>b.version-a.version)[0];if(!x)throw new Error("Notification template not found");return x;}
+  #templateVersion(id,version){const x=this.templateStore.get(id+":"+version)||[...this.templateStore.values()].find(row=>row.id===id&&row.version===version);if(!x)throw new Error("Notification template version not found");return x;}
   #rule(id){const x=this.ruleStore.get(id);if(!x)throw new Error("Notification rule not found");return x;}
   #reject(store,id){if(store.has(id))throw new Error("Configuration ID already exists");}
   #authorize(principal,action,organizationId){if(!this.authorize(principal,action,{organizationId}))throw new Error("Not authorized");}

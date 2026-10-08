@@ -86,6 +86,19 @@ test("durable notification configuration pins versions, survives fresh instances
   });
   await assert.rejects(()=>services.configurationService.publishRule({principal:principalA,ruleId:pendingRule.id}),/published template/i);
   assert.equal((await services.configurationService.getRule({principal:principalA,ruleId:pendingRule.id})).status,"draft");
+  const wrongChannelRule=await services.configurationService.createRule({
+    principal:principalA,id:"wrong-channel-rule-"+suffix,name:"Wrong channel reference",eventType:"job.status.changed",
+    recipientRules:[{type:"event_payload",path:"recipientUserId"}],
+    templateRefs:[{templateId:templateV1.id,version:1}],allowedChannels:["email"]
+  }).catch(error=>({error}));
+  if(wrongChannelRule.error) assert.match(wrongChannelRule.error.message,/channel is not allowed/i);
+  else {
+    await assert.rejects(()=>services.configurationService.publishRule({principal:principalA,ruleId:wrongChannelRule.id}),/channel is not allowed/i);
+  }
+  await assert.rejects(()=>transaction(principalA,"rule.illegal-channel",db=>db.query(
+    "INSERT INTO notification_rules (organization_id,rule_id,name,event_type,conditions,recipient_rules,template_refs,allowed_channels,status) VALUES ($1,$2,'Direct SQL invalid rule','job.status.changed','{}'::jsonb,'[{\\"type\\":\\"event_payload\\",\\"path\\":\\"recipientUserId\\"}]'::jsonb,$3::jsonb,'[\\"email\\"]'::jsonb,'published')",
+    [orgA,"illegal-channel-rule-"+suffix,JSON.stringify([{templateId:templateV1.id,version:1}])]
+  )),/channel is not allowed/i);
   const missingRuleDraft=await services.configurationService.createRule({
     principal:principalA,id:"missing-rule-"+suffix,name:"Missing reference",eventType:"job.status.changed",
     recipientRules:[{type:"event_payload",path:"recipientUserId"}],
@@ -105,6 +118,18 @@ test("durable notification configuration pins versions, survives fresh instances
   const publishedRule=await services.configurationService.publishRule({principal:principalA,ruleId:rule.id});
   assert.equal(publishedRule.status,"published");
 
+  // An enabled published rule protects its exact template dependency from archival.
+  await assert.rejects(
+    ()=>services.configurationService.archiveTemplate({principal:principalA,templateId:templateV1.id,version:1}),
+    /cannot archive.*enabled published rule/i
+  );
+  assert.equal((await services.configurationService.getTemplate({principal:principalA,templateId:templateV1.id,version:1})).status,"published");
+  // Database enforcement rejects the same unsafe transition when bypassing the service.
+  await assert.rejects(()=>transaction(principalA,"template.illegal-archive",db=>db.query(
+    "UPDATE notification_templates SET status='archived',archived_at=now() WHERE organization_id=$1 AND template_id=$2 AND version=1",
+    [orgA,templateV1.id]
+  )),/cannot archive.*enabled published rule/i);
+
   // Published version content is immutable. A new version is separate; the rule remains pinned to v1.
   await assert.rejects(()=>transaction(principalA,"template.illegal-edit",db=>db.query(
     "UPDATE notification_templates SET body=$4 WHERE organization_id=$1 AND template_id=$2 AND version=$3",
@@ -117,6 +142,14 @@ test("durable notification configuration pins versions, survives fresh instances
   assert.equal(templateV2.version,2);
   const publishedV2=await services.configurationService.publishTemplate({principal:principalA,templateId:templateV1.id,version:2});
   assert.equal(publishedV2.status,"published");
+
+  // Concurrent version requests use serialized allocation and preserve each committed draft.
+  const concurrentVersions=await Promise.all([
+    services.configurationService.createTemplateVersion({principal:principalA,templateId:templateV1.id,sourceVersion:1,input:{body:"Concurrent draft A"}}),
+    services.configurationService.createTemplateVersion({principal:principalA,templateId:templateV1.id,sourceVersion:1,input:{body:"Concurrent draft B"}})
+  ]);
+  assert.deepEqual(concurrentVersions.map(item=>item.version).sort((a,b)=>a-b),[3,4]);
+  assert.equal(new Set(concurrentVersions.map(item=>item.version)).size,2);
   services=freshServices();
   const persistedRule=await services.configurationService.getRule({principal:principalA,ruleId:rule.id});
   assert.equal(persistedRule.templateRefs[0].version,1);

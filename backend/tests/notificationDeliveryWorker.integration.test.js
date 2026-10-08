@@ -215,3 +215,70 @@ test("durable notification delivery worker processes events, retries safely, and
   await assert.rejects(()=>workerWithoutDispatch.processOrganization(orgA),/Not authorized/);
   await assert.rejects(()=>workerWithoutDispatch.processDeliveryAttempts(orgA),/Not authorized/);
 });
+
+
+test("notification delivery claims skip rows locked by another PostgreSQL transaction",{skip:!shouldRun},async t=>{
+  const pool=createDatabasePool({databaseUrl:process.env.DATABASE_URL,ssl:process.env.DATABASE_SSL==="false"?false:{rejectUnauthorized:true},max:4,idleTimeoutMillis:30000,connectionTimeoutMillis:5000});
+  const suffix=randomUUID(),org="worker-concurrent-"+suffix,role="worker_concurrent_"+suffix.replace(/[^a-zA-Z0-9_]/g,"_");
+  const principal={userId:"worker-concurrent-user-"+suffix,organizationId:org,permissions:["notification:dispatch"]};
+  const notificationId="concurrent-notification-"+suffix,attemptId="concurrent-attempt-"+suffix;
+  await runMigrations(pool);
+  const tx=(p,action,work)=>withTransaction(pool,{organizationId:p.organizationId,userId:p.userId,action},async db=>{
+    await db.query('SET LOCAL ROLE "'+role+'"');
+    return work(db);
+  });
+  const repo=new NotificationDeliveryAttemptRepository({pool});
+  t.after(async()=>{
+    await tx({...principal,userId:"cleanup"},"test.cleanup",async db=>{
+      await db.query("DELETE FROM notification_delivery_attempts WHERE organization_id=$1",[org]);
+      await db.query("DELETE FROM notifications WHERE organization_id=$1",[org]);
+      await db.query("DELETE FROM organizations WHERE id=$1",[org]);
+    }).catch(()=>{});
+    await pool.query('DROP ROLE IF EXISTS "'+role+'"').catch(()=>{});
+    await pool.end();
+  });
+  await pool.query("INSERT INTO organizations(id,name) VALUES($1,$2)",[org,"Concurrent Worker"]);
+  await pool.query('CREATE ROLE "'+role+'" NOLOGIN NOSUPERUSER NOBYPASSRLS');
+  await pool.query('GRANT USAGE ON SCHEMA public TO "'+role+'"');
+  await pool.query('GRANT SELECT,INSERT,UPDATE,DELETE ON organizations,notifications,notification_delivery_attempts TO "'+role+'"');
+  await tx(principal,"fixture.create",async db=>{
+    await new NotificationRepository({pool}).create({principal,notification:new (require("../src/models/notification").Notification)({
+      id:notificationId,organizationId:org,recipientId:principal.userId,title:"Concurrent claim",message:"Lease safely"
+    }),db});
+    await repo.create({principal,attempt:{
+      id:attemptId,notificationId,channel:"email",provider:"fake",status:"pending",attemptNumber:1,
+      idempotencyKey:"concurrent-key-"+suffix,availableAt:new Date("2026-10-06T12:00:00.000Z"),maxAttempts:3
+    },db});
+  });
+
+  const client=await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT set_config('app.organization_id',$1,true)",[org]);
+    await client.query("SELECT set_config('app.user_id',$1,true)",[principal.userId]);
+    await client.query("SELECT set_config('app.action',$1,true)",["test.concurrent.claim"]);
+    await client.query('SET LOCAL ROLE "'+role+'"');
+    const locked=await client.query(
+      "SELECT id FROM notification_delivery_attempts WHERE organization_id=$1 AND id=$2 FOR UPDATE",
+      [org,attemptId]
+    );
+    assert.equal(locked.rowCount,1);
+
+    // This claim must use a separate pool connection/transaction while the row lock remains held.
+    const concurrentClaim=await tx(principal,"claim.contending",db=>repo.claimBatch({
+      principal,limit:1,now:new Date("2026-10-06T12:00:00.000Z"),leaseMs:60000,db
+    }));
+    assert.equal(concurrentClaim.some(attempt=>attempt.id===attemptId),false);
+
+    await client.query("COMMIT");
+    const subsequentClaim=await tx(principal,"claim.after-release",db=>repo.claimBatch({
+      principal,limit:1,now:new Date("2026-10-06T12:00:00.000Z"),leaseMs:60000,db
+    }));
+    assert.equal(subsequentClaim.filter(attempt=>attempt.id===attemptId).length,1);
+  } catch(error) {
+    try { await client.query("ROLLBACK"); } catch {}
+    throw error;
+  } finally {
+    client.release();
+  }
+});

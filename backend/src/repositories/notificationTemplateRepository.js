@@ -50,6 +50,7 @@ class NotificationTemplateRepository {
   }
   async archive({principal,templateId,version,db=this.pool}={}) {
     this.#requirePrincipal(principal);
+    await db.query("SELECT id FROM organizations WHERE id=$1 FOR UPDATE",[principal.organizationId]);
     const current=await this.getVersion({principal,templateId,version,db});
     if(!current) throw new Error("Notification template version not found");
     if(current.status==="archived") return current;
@@ -62,7 +63,7 @@ class NotificationTemplateRepository {
           LIMIT 1`,
         [principal.organizationId,templateId,version]
       );
-      if(refs.rowCount) throw new Error("Cannot archive a published template version referenced by an enabled published rule; deactivate or archive the rule first");
+      if(refs.rowCount) throw new Error("Cannot deactivate or archive a published template version referenced by an enabled published rule; archive the rule first");
     }
     if(!["draft","inactive","published"].includes(current.status)) throw new Error("Only active template versions can be archived");
     const result=await db.query(

@@ -1,3 +1,13 @@
+ALTER TABLE notifications
+  ADD COLUMN IF NOT EXISTS icon TEXT,
+  ADD COLUMN IF NOT EXISTS color TEXT,
+  ADD COLUMN IF NOT EXISTS template_id TEXT,
+  ADD COLUMN IF NOT EXISTS template_version INTEGER,
+  ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+CREATE UNIQUE INDEX IF NOT EXISTS notifications_org_id_unique
+  ON notifications (organization_id, id);
+
 CREATE TABLE IF NOT EXISTS notification_templates (
   organization_id TEXT NOT NULL REFERENCES organizations(id),
   template_id TEXT NOT NULL,
@@ -64,14 +74,33 @@ CREATE POLICY notification_rules_tenant_isolation ON notification_rules
 CREATE OR REPLACE FUNCTION prevent_published_notification_template_mutation()
 RETURNS trigger
 LANGUAGE plpgsql
-AS $$
+AS $
 BEGIN
-  IF OLD.status = 'published' THEN
-    RAISE EXCEPTION 'published notification template versions are immutable';
+  IF TG_OP = 'DELETE' THEN
+    IF OLD.status = 'published' THEN
+      RAISE EXCEPTION 'published notification template versions cannot be deleted';
+    END IF;
+    RETURN OLD;
+  END IF;
+
+  IF OLD.status = 'published' AND (
+    NEW.organization_id IS DISTINCT FROM OLD.organization_id OR
+    NEW.template_id IS DISTINCT FROM OLD.template_id OR
+    NEW.version IS DISTINCT FROM OLD.version OR
+    NEW.name IS DISTINCT FROM OLD.name OR
+    NEW.channel IS DISTINCT FROM OLD.channel OR
+    NEW.subject IS DISTINCT FROM OLD.subject OR
+    NEW.body IS DISTINCT FROM OLD.body OR
+    NEW.variables IS DISTINCT FROM OLD.variables OR
+    NEW.created_at IS DISTINCT FROM OLD.created_at OR
+    NEW.published_at IS DISTINCT FROM OLD.published_at OR
+    NEW.status NOT IN ('published','inactive','archived')
+  ) THEN
+    RAISE EXCEPTION 'published notification template content is immutable';
   END IF;
   RETURN NEW;
 END;
-$$;
+$;
 
 DROP TRIGGER IF EXISTS notification_templates_immutable_published ON notification_templates;
 CREATE TRIGGER notification_templates_immutable_published
@@ -81,9 +110,16 @@ FOR EACH ROW EXECUTE FUNCTION prevent_published_notification_template_mutation()
 CREATE OR REPLACE FUNCTION prevent_published_notification_rule_mutation()
 RETURNS trigger
 LANGUAGE plpgsql
-AS $$
+AS $
 BEGIN
-  IF OLD.status = 'published' AND (
+  IF TG_OP = 'DELETE' THEN
+    IF OLD.status <> 'draft' THEN
+      RAISE EXCEPTION 'published notification rules cannot be deleted; archive them instead';
+    END IF;
+    RETURN OLD;
+  END IF;
+
+  IF OLD.status <> 'draft' AND (
     NEW.organization_id IS DISTINCT FROM OLD.organization_id OR
     NEW.rule_id IS DISTINCT FROM OLD.rule_id OR
     NEW.name IS DISTINCT FROM OLD.name OR
@@ -98,11 +134,11 @@ BEGIN
     NEW.enabled IS DISTINCT FROM OLD.enabled OR
     NEW.status NOT IN ('published','inactive','archived')
   ) THEN
-    RAISE EXCEPTION 'published notification rules cannot be edited; create a new rule version';
+    RAISE EXCEPTION 'notification rule content is immutable after publication; create a new rule';
   END IF;
   RETURN NEW;
 END;
-$$;
+$;
 
 DROP TRIGGER IF EXISTS notification_rules_published_immutable ON notification_rules;
 CREATE TRIGGER notification_rules_published_immutable

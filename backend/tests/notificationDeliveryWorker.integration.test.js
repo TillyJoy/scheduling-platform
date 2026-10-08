@@ -375,3 +375,101 @@ test("delivery worker stops at max attempts and never retries a permanent provid
   assert.equal(permanentCalls,1);
   assert.equal((await tx(principal,"verify.no-retries",db=>deliveryRepo.listForNotification({principal,notificationId:notification.id,db}))).length,2);
 });
+
+
+test("a new worker instance recovers persisted stale delivery and event leases after restart",{skip:!shouldRun},async t=>{
+  const pool=createDatabasePool();
+  const suffix=randomUUID(),org="worker-restart-"+suffix,role="worker_restart_"+suffix.replace(/[^a-zA-Z0-9_]/g,"_");
+  const principal={userId:"worker-restart-user-"+suffix,organizationId:org,permissions:["event:emit","event:read","event:dispatch","notification:create","notification:read","notification:dispatch","notification:manage"]};
+  const workerPrincipal=organizationId=>({userId:"system-restart-worker-"+suffix,organizationId,permissions:["event:dispatch","notification:dispatch","notification:create"]});
+  let now=new Date("2026-10-06T12:00:00.000Z");
+  await runMigrations(pool);
+  const tx=(p,action,work)=>withTransaction(pool,{organizationId:p.organizationId,userId:p.userId,action},async db=>{
+    await db.query('SET LOCAL ROLE "'+role+'"');
+    return work(db);
+  });
+  const eventRepo=new DomainEventRepository({pool}),outboxRepo=new DomainEventOutboxRepository({pool});
+  const notificationRepo=new NotificationRepository({pool}),deliveryRepo=new NotificationDeliveryAttemptRepository({pool});
+  const notificationService=new NotificationService({notificationRepository:notificationRepo,transaction:tx});
+  const processor=new NotificationEventProcessor({ruleStore:new Map(),templateStore:new Map(),notificationService,deliveryAttemptRepository:deliveryRepo});
+  const providers=new NotificationProviderRegistry();
+  providers.register("email","fake",{send:async request=>({status:"success",providerMessageId:"restart-provider-"+request.deliveryAttemptId})});
+  t.after(async()=>{
+    await tx({...principal,userId:"cleanup"},"test.cleanup",async db=>{
+      await db.query("DELETE FROM notification_delivery_attempts WHERE organization_id=$1",[org]);
+      await db.query("DELETE FROM notifications WHERE organization_id=$1",[org]);
+      await db.query("DELETE FROM event_outbox WHERE organization_id=$1",[org]);
+      await db.query("DELETE FROM domain_events WHERE organization_id=$1",[org]);
+      await db.query("DELETE FROM audit_events WHERE organization_id=$1",[org]);
+      await db.query("DELETE FROM organizations WHERE id=$1",[org]);
+    }).catch(()=>{});
+    await pool.query('DROP ROLE IF EXISTS "'+role+'"').catch(()=>{});
+    await pool.end();
+  });
+  await pool.query("INSERT INTO organizations(id,name) VALUES($1,$2)",[org,"Worker Restart"]);
+  await pool.query('CREATE ROLE "'+role+'" NOLOGIN NOSUPERUSER NOBYPASSRLS');
+  await pool.query('GRANT USAGE ON SCHEMA public TO "'+role+'"');
+  await pool.query('GRANT SELECT,INSERT,UPDATE,DELETE ON organizations,audit_events,domain_events,event_outbox,notifications,notification_delivery_attempts TO "'+role+'"');
+
+  const notification=await tx(principal,"fixture.notification",db=>notificationRepo.create({principal,notification:new (require("../src/models/notification").Notification)({
+    id:"restart-notification-"+suffix,organizationId:org,recipientId:principal.userId,title:"Restart recovery",message:"Lease recovery is durable"
+  }),db}));
+  const delivery=await tx(principal,"fixture.delivery",db=>deliveryRepo.create({principal,attempt:{
+    id:"restart-delivery-"+suffix,notificationId:notification.id,channel:"email",provider:"fake",status:"pending",attemptNumber:1,
+    idempotencyKey:"restart-delivery-key-"+suffix,availableAt:now,lockedAt:new Date(now.getTime()+500),maxAttempts:3
+  },db}));
+  const event=new DomainEvent({id:"restart-event-"+suffix,organizationId:org,eventType:"job.status.changed",entityType:"job",entityId:"restart-job",
+    actorUserId:principal.userId,payload:{newStatus:"ready",recipientUserId:principal.userId}});
+  const outbox=await tx(principal,"fixture.event",async db=>{
+    await eventRepo.create({principal,event,db});
+    return outboxRepo.enqueue({principal,event,availableAt:now,db});
+  });
+  const eventLease=new Date(now.getTime()+500);
+  await tx(principal,"fixture.event-lease",db=>db.query(
+    "UPDATE event_outbox SET status='processing',attempts=1,locked_at=$3 WHERE organization_id=$1 AND id=$2",
+    [org,outbox.id,eventLease]
+  ));
+
+  // Simulate the original worker stopping without releasing either durable lease.
+  const workerBeforeRestart=new NotificationDeliveryWorker({
+    transaction:tx,outboxRepository:outboxRepo,eventRepository:eventRepo,notificationEventProcessor:processor,
+    notificationRepository:notificationRepo,deliveryAttemptRepository:deliveryRepo,providerRegistry:providers.providers,
+    principalFactory:workerPrincipal,now:()=>now,leaseMs:1000,maxAttempts:3,backoff:()=>100
+  });
+  assert.ok(workerBeforeRestart);
+  const persistedBeforeRestart=await tx(principal,"verify.persisted-leases",async db=>{
+    const attempt=await deliveryRepo.get({principal,deliveryAttemptId:delivery.id,db});
+    const eventRows=await db.query("SELECT status,locked_at,attempts FROM event_outbox WHERE organization_id=$1 AND id=$2",[org,outbox.id]);
+    return {attempt,eventRow:eventRows.rows[0]};
+  });
+  assert.ok(persistedBeforeRestart.attempt.lockedAt);
+  assert.equal(persistedBeforeRestart.eventRow.status,"processing");
+  assert.ok(persistedBeforeRestart.eventRow.locked_at);
+
+  now=new Date(now.getTime()+2000);
+  const workerAfterRestart=new NotificationDeliveryWorker({
+    transaction:tx,outboxRepository:outboxRepo,eventRepository:eventRepo,notificationEventProcessor:processor,
+    notificationRepository:notificationRepo,deliveryAttemptRepository:deliveryRepo,providerRegistry:providers.providers,
+    principalFactory:workerPrincipal,now:()=>now,leaseMs:1000,maxAttempts:3,backoff:()=>100
+  });
+
+  const eventResults=await workerAfterRestart.processOrganization(org);
+  assert.equal(eventResults.length,1);
+  assert.equal(eventResults[0].outboxId,outbox.id);
+  assert.equal(eventResults[0].status,"published");
+  const deliveryResults=await workerAfterRestart.processDeliveryAttempts(org);
+  assert.equal(deliveryResults.length,1);
+  assert.equal(deliveryResults[0].deliveryAttemptId,delivery.id);
+  assert.equal(deliveryResults[0].status,"delivered");
+
+  const recoveredState=await tx(principal,"verify.recovered-after-restart",async db=>{
+    const attempt=await deliveryRepo.get({principal,deliveryAttemptId:delivery.id,db});
+    const eventRows=await db.query("SELECT status,locked_at,attempts,published_at FROM event_outbox WHERE organization_id=$1 AND id=$2",[org,outbox.id]);
+    return {attempt,eventRow:eventRows.rows[0]};
+  });
+  assert.equal(recoveredState.attempt.status,"delivered");
+  assert.equal(recoveredState.attempt.lockedAt,null);
+  assert.equal(recoveredState.eventRow.status,"published");
+  assert.equal(recoveredState.eventRow.locked_at,null);
+  assert.ok(recoveredState.eventRow.published_at);
+});

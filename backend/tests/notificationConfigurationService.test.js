@@ -10,16 +10,26 @@ assert.throws(()=>service.publishRule({principal:admin,ruleId:"rule-1"}),/Notifi
 const template=service.publishTemplate({principal:admin,templateId:"template-1"});
 assert.equal(template.status,"published");
 assert.ok(template.publishedAt);
+assert.throws(()=>service.archiveTemplate({principal:admin,templateId:"template-1"}),/immutable/i);
+const templateV2=service.createTemplateVersion({principal:admin,templateId:"template-1",input:{body:"Version two {{recipient.first_name}}"}});
+assert.equal(templateV2.version,2);
+assert.equal(templateV2.status,"draft");
+assert.equal(service.getTemplate({principal:admin,templateId:"template-1",version:1}).body,"Hello {{recipient.first_name}}, your appointment is now {{appointment.start_time}}.");
+const publishedV2=service.publishTemplate({principal:admin,templateId:"template-1",version:2});
+assert.equal(publishedV2.version,2);
 
 service.createRule({principal:admin,id:"rule-1",organizationId:"org-a",name:"Notify when appointment changes",eventType:"appointment.rescheduled",conditions:{appointmentStatus:"scheduled"},recipientRules:["appointment.participant"],templateIds:["template-1"],allowedChannels:["email"],timing:{mode:"immediate"},required:true});
 const rule=service.publishRule({principal:admin,ruleId:"rule-1"});
 assert.equal(rule.status,"published");
+assert.equal(rule.templateRefs[0].version,1);
 assert.equal(service.listTemplates({principal:admin}).length,1);
 assert.equal(service.listRules({principal:admin}).length,1);
 assert.equal(service.listTemplates({principal:other}).length,0);
 assert.equal(service.listRules({principal:other}).length,0);
 
 assert.throws(()=>service.createRule({principal:admin,id:"rule-cross",organizationId:"org-a",name:"Cross tenant template",eventType:"appointment.updated",recipientRules:["appointment.participant"],templateIds:["missing-template"]}),/invalid notification template/);
+const unpub=service.createTemplate({principal:admin,id:"template-unpublished",organizationId:"org-a",name:"Unpublished",body:"Draft"});
+assert.throws(()=>service.createRule({principal:admin,id:"rule-unpublished",organizationId:"org-a",name:"References draft",eventType:"appointment.updated",recipientRules:["appointment.participant"],templateRefs:[{templateId:unpub.id,version:unpub.version}]}),/published template/i);
 assert.throws(()=>service.publishRule({principal:other,ruleId:"rule-1"}),/Not authorized/);
 assert.throws(()=>service.createTemplate({principal:admin,id:"template-1",organizationId:"org-a",name:"Duplicate",body:"Duplicate"}),/Configuration ID already exists/);
 assert.throws(()=>service.createTemplate({principal:admin,id:"template-cross",organizationId:"org-b",name:"Cross tenant",body:"No"}),/Not authorized/);

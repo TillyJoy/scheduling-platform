@@ -458,13 +458,14 @@ test("a new worker instance recovers persisted stale delivery and event leases a
   const eventResults=await workerAfterRestart.processOrganization(org);
   assert.equal(eventResults.length,1);
   assert.equal(eventResults[0].outboxId,outbox.id);
-  assert.equal(eventResults[0].status,"failed");
+  assert.equal(eventResults[0].status,"retry_scheduled");
   const eventState=await tx(principal,"verify.event-recovered",db=>db.query(
-    "SELECT status,locked_at,attempts FROM event_outbox WHERE organization_id=$1 AND id=$2",[org,outbox.id]
+    "SELECT status,locked_at,attempts,available_at FROM event_outbox WHERE organization_id=$1 AND id=$2",[org,outbox.id]
   ));
   assert.equal(eventState.rows[0].status,"failed");
   assert.equal(eventState.rows[0].locked_at,null);
   assert.equal(eventState.rows[0].attempts,2);
+  assert.ok(new Date(eventState.rows[0].available_at).getTime() >= now.getTime());
 
   const deliveryResults=await workerAfterRestart.processDeliveryAttempts(org);
   assert.equal(deliveryResults.length,1);

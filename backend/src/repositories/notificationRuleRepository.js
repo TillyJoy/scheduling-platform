@@ -16,7 +16,6 @@ class NotificationRuleRepository {
     for(const ref of refs) if(ref.version!==null) {
       const template=await this.templateRepository.getVersion({principal,templateId:ref.templateId,version:ref.version,db});
       if(!template||template.organizationId!==principal.organizationId) throw new Error("Rule references an invalid notification template");
-      if(template.status!=="published") throw new Error("Rule references an unpublished notification template version");
       ref.version=template.version;
       validatedTemplates.push(template);
     } else {
@@ -37,6 +36,7 @@ class NotificationRuleRepository {
   }
   async publish({principal,ruleId,db=this.pool}={}) {
     this.#requirePrincipal(principal);
+    await db.query("SELECT id FROM organizations WHERE id=$1 FOR UPDATE",[principal.organizationId]);
     const locked=await db.query("SELECT status FROM notification_rules WHERE organization_id=$1 AND rule_id=$2 FOR UPDATE",[principal.organizationId,ruleId]);
     if(!locked.rows[0]) throw new Error("Notification rule not found");
     const before=await this.get({principal,ruleId,db});

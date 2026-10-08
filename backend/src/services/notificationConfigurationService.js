@@ -24,6 +24,7 @@ class NotificationConfigurationService {
     const {principal,...input}=args;
     this.#requirePrincipal(principal);
     const item=new NotificationTemplate(input);
+    if(item.organizationId!==principal.organizationId) throw new Error("Not authorized");
     this.#authorize(principal,ACTIONS.TEMPLATE_CREATE,item.organizationId);
     this.#reject(this.templateStore,item.id);
     if(item.status!=="draft") throw new Error("Templates must be created as drafts");
@@ -82,6 +83,7 @@ class NotificationConfigurationService {
     const {principal,...input}=args;
     this.#requirePrincipal(principal);
     const item=new NotificationRule(input);
+    if(item.organizationId!==principal.organizationId) throw new Error("Not authorized");
     this.#authorize(principal,ACTIONS.RULE_CREATE,item.organizationId);
     this.#reject(this.ruleStore,item.id);
     const refs=item.templateRefs.map(ref=>{
@@ -144,7 +146,7 @@ class NotificationConfigurationService {
   getTemplate({principal,templateId,version=null}) {
     this.#requirePrincipal(principal);this.#authorize(principal,ACTIONS.READ,principal.organizationId);
     if(this.durable) return this.#durableGetTemplate({principal,templateId,version});
-    const template=this.templateStore.get(templateId);
+    const template=version===null?this.templateStore.get(templateId)||this.#template(templateId):this.#templateVersion(templateId,version);
     if(!template||template.organizationId!==principal.organizationId||(version!==null&&template.version!==version)) return null;
     return template;
   }

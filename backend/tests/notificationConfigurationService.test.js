@@ -21,6 +21,14 @@ const activeRule=service.ruleStore.get("rule-1");
 service.ruleStore.set("rule-1",new (require("../src/models/notificationRule").NotificationRule)({...activeRule,status:"archived"}));
 const archivedTemplate=service.archiveTemplate({principal:admin,templateId:"template-1",version:1});
 assert.equal(archivedTemplate.status,"archived");
+const deactivateTemplate=service.createTemplate({principal:admin,id:"template-inactive",organizationId:"org-a",name:"Inactive then restore",channel:"email",body:"Lifecycle"});
+service.publishTemplate({principal:admin,templateId:deactivateTemplate.id});
+service.templateStore.set(deactivateTemplate.id+":"+deactivateTemplate.version,
+  new (require("../src/models/notificationTemplate").NotificationTemplate)({...deactivateTemplate,status:"inactive"}));
+service.templateStore.set(deactivateTemplate.id,service.templateStore.get(deactivateTemplate.id+":"+deactivateTemplate.version));
+assert.throws(()=>service.archiveTemplate({principal:admin,templateId:deactivateTemplate.id,version:1}),/Only active template versions/i);
+const restoredTemplate=service.publishTemplate({principal:admin,templateId:deactivateTemplate.id,version:1});
+assert.equal(restoredTemplate.status,"published");
 
 const templateV2=service.createTemplateVersion({principal:admin,templateId:"template-1",input:{body:"Version two {{recipient.first_name}}"}});
 assert.equal(templateV2.version,2);

@@ -157,9 +157,16 @@ test("durable notification delivery worker processes events, retries safely, and
   ));
   assert.deepEqual(attemptsAfterSuccess.rows.map(r=>[r.status,r.attempt_number]),[["delivered",1],["failed",1],["delivered",2]]);
 
+  const activeNotification=await tx(principalA,"delivery.active-notification",db=>notificationRepo.create({
+    principal:principalA,
+    notification:new (require("../src/models/notification").Notification)({
+      id:"active-notification-"+suffix,organizationId:orgA,recipientId:principalA.userId,severity:"information",
+      title:"Active delivery",message:"Active delivery",type:"event",deliveryKey:"active-delivery-"+suffix
+    }),db
+  }));
   const active=await tx(principalA,"delivery.active",db=>deliveryRepo.create({
     principal:principalA,attempt:{
-      id:"active-"+suffix,notificationId:notifications.rows[0].id,channel:"email",provider:"fake",
+      id:"active-"+suffix,notificationId:activeNotification.id,channel:"email",provider:"fake",
       status:"pending",attemptNumber:1,idempotencyKey:"active-key-"+suffix,availableAt:now,maxAttempts:3
     },db
   }));

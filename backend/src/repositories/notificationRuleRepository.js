@@ -20,8 +20,8 @@ class NotificationRuleRepository {
       ref.version=latest.version;
     }
     const result=await db.query(
-      \`INSERT INTO notification_rules (organization_id,rule_id,name,event_type,conditions,recipient_rules,template_refs,allowed_channels,timing,required,priority,enabled,status,created_at,updated_at)
-       VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12,'draft',$13,$13) RETURNING *\`,
+      `INSERT INTO notification_rules (organization_id,rule_id,name,event_type,conditions,recipient_rules,template_refs,allowed_channels,timing,required,priority,enabled,status,created_at,updated_at)
+       VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12,'draft',$13,$13) RETURNING *`,
       [principal.organizationId,record.id,record.name,record.eventType,JSON.stringify(record.conditions),JSON.stringify(record.recipientRules),JSON.stringify(refs),JSON.stringify(record.allowedChannels),JSON.stringify(record.timing),record.required,record.priority,record.enabled,this.clock()]
     );
     return this.#map(result.rows[0]);
@@ -35,8 +35,8 @@ class NotificationRuleRepository {
     const resolved=await this.templateRepository.resolvePublishedRefs({principal,templateRefs:before.templateRefs,db});
     for(const ref of resolved) if(!before.allowedChannels.includes(ref.channel)) throw new Error("Rule template channel is not allowed by the rule");
     const result=await db.query(
-      \`UPDATE notification_rules SET status='published',published_at=$3,updated_at=$3
-       WHERE organization_id=$1 AND rule_id=$2 AND status='draft' RETURNING *\`,
+      `UPDATE notification_rules SET status='published',published_at=$3,updated_at=$3
+       WHERE organization_id=$1 AND rule_id=$2 AND status='draft' RETURNING *`,
       [principal.organizationId,ruleId,this.clock()]
     );
     if(!result.rows[0]) throw new Error("Notification rule changed concurrently");
@@ -48,8 +48,8 @@ class NotificationRuleRepository {
     if(!current) throw new Error("Notification rule not found");
     if(current.status==="published") {
       const result=await db.query(
-        \`UPDATE notification_rules SET status='archived',archived_at=$3,updated_at=$3
-         WHERE organization_id=$1 AND rule_id=$2 AND status='published' RETURNING *\`,
+        `UPDATE notification_rules SET status='archived',archived_at=$3,updated_at=$3
+         WHERE organization_id=$1 AND rule_id=$2 AND status='published' RETURNING *`,
         [principal.organizationId,ruleId,this.clock()]
       );
       if(!result.rows[0]) throw new Error("Notification rule changed concurrently");
@@ -57,8 +57,8 @@ class NotificationRuleRepository {
     }
     if(current.status==="archived") return current;
     const result=await db.query(
-      \`UPDATE notification_rules SET status='archived',archived_at=$3,updated_at=$3
-       WHERE organization_id=$1 AND rule_id=$2 AND status IN ('draft','inactive') RETURNING *\`,
+      `UPDATE notification_rules SET status='archived',archived_at=$3,updated_at=$3
+       WHERE organization_id=$1 AND rule_id=$2 AND status IN ('draft','inactive') RETURNING *`,
       [principal.organizationId,ruleId,this.clock()]
     );
     if(!result.rows[0]) throw new Error("Notification rule changed concurrently");
@@ -72,7 +72,7 @@ class NotificationRuleRepository {
   async list({principal,publishedOnly=false,db=this.pool}={}) {
     this.#requirePrincipal(principal);
     const result=await db.query(
-      \`SELECT * FROM notification_rules WHERE organization_id=$1 \${publishedOnly?"AND status='published' AND enabled=true":""} ORDER BY rule_id\`,
+      `SELECT * FROM notification_rules WHERE organization_id=$1 ${publishedOnly?"AND status='published' AND enabled=true":""} ORDER BY rule_id`,
       [principal.organizationId]
     );
     return result.rows.map(row=>this.#map(row));

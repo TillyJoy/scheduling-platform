@@ -6,6 +6,7 @@ class NotificationTemplateRepository {
     this.#requirePrincipal(principal);
     if(template.organizationId && template.organizationId!==principal.organizationId) throw new Error("Notification template organization mismatch");
     const record=new NotificationTemplate({...template,organizationId:principal.organizationId,status:"draft"});
+    await db.query("SELECT id FROM organizations WHERE id=$1 FOR UPDATE",[principal.organizationId]);
     const max=await db.query("SELECT COALESCE(MAX(version),0)::int AS version FROM notification_templates WHERE organization_id=$1 AND template_id=$2",[principal.organizationId,record.id]);
     const version=Math.max(record.version,max.rows[0].version+1);
     const result=await db.query(
@@ -17,6 +18,7 @@ class NotificationTemplateRepository {
   }
   async createNextVersion({principal,templateId,sourceVersion,input={},db=this.pool}={}) {
     this.#requirePrincipal(principal);
+    await db.query("SELECT id FROM organizations WHERE id=$1 FOR UPDATE",[principal.organizationId]);
     const current=await this.getVersion({principal,templateId,version:sourceVersion,db});
     if(!current) throw new Error("Notification template version not found");
     if(current.status!=="published") throw new Error("Only a published template version can be versioned");
@@ -30,6 +32,8 @@ class NotificationTemplateRepository {
   }
   async publish({principal,templateId,version,db=this.pool}={}) {
     this.#requirePrincipal(principal);
+    const lock=await db.query("SELECT status FROM notification_templates WHERE organization_id=$1 AND template_id=$2 AND version=$3 FOR UPDATE",[principal.organizationId,templateId,version]);
+    if(!lock.rows[0]) throw new Error("Notification template version not found");
     const before=await this.getVersion({principal,templateId,version,db});
     if(!before) throw new Error("Notification template version not found");
     if(before.status==="published") return before;

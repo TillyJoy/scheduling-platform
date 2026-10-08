@@ -59,8 +59,7 @@ class NotificationConfigurationService {
         rule.organizationId===item.organizationId&&rule.status==="published"&&rule.enabled&&
         (rule.templateRefs||(rule.templateIds||[]).map(id=>({templateId:id,version:null}))).some(ref=>ref.templateId===item.id&&(ref.version===null||ref.version===item.version))
       );
-      if(activeRule) throw new Error("Cannot archive a published template version referenced by an enabled published rule; deactivate or archive the rule first");
-      throw new Error("Published template versions are immutable; create a new version instead");
+      if(activeRule) throw new Error("Cannot deactivate or archive a published template version referenced by an enabled published rule; archive the rule first");
     }
     if(item.status==="archived") return item;
     const updated=new NotificationTemplate({...item,status:"archived",archivedAt:new Date(),updatedAt:new Date()});

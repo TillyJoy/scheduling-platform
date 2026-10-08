@@ -6,9 +6,10 @@ class NotificationTemplateRepository {
     this.#requirePrincipal(principal);
     if(template.organizationId && template.organizationId!==principal.organizationId) throw new Error("Notification template organization mismatch");
     const record=new NotificationTemplate({...template,organizationId:principal.organizationId,status:"draft"});
+    // The organization row serializes all version allocation within one tenant, including first creation.
     await db.query("SELECT id FROM organizations WHERE id=$1 FOR UPDATE",[principal.organizationId]);
     const max=await db.query("SELECT COALESCE(MAX(version),0)::int AS version FROM notification_templates WHERE organization_id=$1 AND template_id=$2",[principal.organizationId,record.id]);
-    const version=Math.max(record.version,max.rows[0].version+1);
+    const version=max.rows[0].version+1;
     const result=await db.query(
       `INSERT INTO notification_templates (organization_id,template_id,version,name,channel,subject,body,variables,status,created_at,updated_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,'draft',$9,$9) RETURNING *`,
@@ -22,7 +23,8 @@ class NotificationTemplateRepository {
     const current=await this.getVersion({principal,templateId,version:sourceVersion,db});
     if(!current) throw new Error("Notification template version not found");
     if(current.status!=="published") throw new Error("Only a published template version can be versioned");
-    const next=new NotificationTemplate({...current,...input,id:templateId,organizationId:principal.organizationId,version:current.version+1,status:"draft",publishedAt:null,archivedAt:null,createdAt:this.clock(),updatedAt:this.clock()});
+    const max=await db.query("SELECT COALESCE(MAX(version),0)::int AS version FROM notification_templates WHERE organization_id=$1 AND template_id=$2",[principal.organizationId,templateId]);
+    const next=new NotificationTemplate({...current,...input,id:templateId,organizationId:principal.organizationId,version:max.rows[0].version+1,status:"draft",publishedAt:null,archivedAt:null,createdAt:this.clock(),updatedAt:this.clock()});
     const result=await db.query(
       `INSERT INTO notification_templates (organization_id,template_id,version,name,channel,subject,body,variables,status,created_at,updated_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,'draft',$9,$9) RETURNING *`,
@@ -51,6 +53,17 @@ class NotificationTemplateRepository {
     const current=await this.getVersion({principal,templateId,version,db});
     if(!current) throw new Error("Notification template version not found");
     if(current.status==="archived") return current;
+    if(current.status==="published") {
+      const refs=await db.query(
+        `SELECT rule.rule_id FROM notification_rules rule
+           CROSS JOIN LATERAL jsonb_array_elements(rule.template_refs) ref
+          WHERE rule.organization_id=$1 AND rule.status='published' AND rule.enabled=true
+            AND ref->>'templateId'=$2 AND (ref->>'version')::INTEGER=$3
+          LIMIT 1`,
+        [principal.organizationId,templateId,version]
+      );
+      if(refs.rowCount) throw new Error("Cannot archive a published template version referenced by an enabled published rule; deactivate or archive the rule first");
+    }
     if(!["draft","inactive","published"].includes(current.status)) throw new Error("Only active template versions can be archived");
     const result=await db.query(
       `UPDATE notification_templates SET status='archived',archived_at=$4,updated_at=$4

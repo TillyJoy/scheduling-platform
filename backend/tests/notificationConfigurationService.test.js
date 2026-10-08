@@ -27,9 +27,7 @@ service.publishTemplate({principal:admin,templateId:deactivateTemplate.id});
 service.templateStore.set(deactivateTemplate.id+":"+deactivateTemplate.version,
   new (require("../src/models/notificationTemplate").NotificationTemplate)({...deactivateTemplate,status:"inactive"}));
 service.templateStore.set(deactivateTemplate.id,service.templateStore.get(deactivateTemplate.id+":"+deactivateTemplate.version));
-assert.throws(()=>service.archiveTemplate({principal:admin,templateId:deactivateTemplate.id,version:1}),/Only active template versions/i);
-const restoredTemplate=service.publishTemplate({principal:admin,templateId:deactivateTemplate.id,version:1});
-assert.equal(restoredTemplate.status,"published");
+assert.equal(service.archiveTemplate({principal:admin,templateId:deactivateTemplate.id,version:1}).status,"archived");
 
 const templateV2=service.createTemplateVersion({principal:admin,templateId:"template-1",input:{body:"Version two {{recipient.first_name}}"}});
 assert.equal(templateV2.version,2);

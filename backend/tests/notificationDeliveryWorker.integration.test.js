@@ -203,5 +203,14 @@ test("durable notification delivery worker processes events, retries safely, and
     principalFactory:()=>({userId:"unauthorized-worker",organizationId:orgA,permissions:[]}),
     now:()=>now
   });
+  const unauthorizedEvent=new DomainEvent({
+    id:"unauthorized-event-"+suffix,organizationId:orgA,eventType:"job.status.changed",
+    entityType:"job",entityId:"job-unauthorized",actorUserId:principalA.userId,
+    payload:{newStatus:"ready",recipientUserId:principalA.userId}
+  });
+  await tx(principalA,"event.unauthorized-fixture",async db=>{
+    await eventRepo.create({principal:principalA,event:unauthorizedEvent,db});
+    await outboxRepo.enqueue({principal:principalA,event:unauthorizedEvent,availableAt:now,db});
+  });
   await assert.rejects(()=>workerWithoutDispatch.processOrganization(orgA),/Not authorized/);
 });

@@ -130,6 +130,10 @@ test("durable notification configuration pins versions, survives fresh instances
   )),/cannot deactivate or archive.*enabled published rule/i);
   assert.equal((await services.configurationService.getTemplate({principal:principalA,templateId:templateV1.id,version:1})).status,"published");
   await assert.rejects(()=>services.configurationService.archiveTemplate({principal:principalA,templateId:templateV1.id,version:1}),/cannot deactivate or archive.*enabled published rule/i);
+  await assert.rejects(()=>transaction(principalA,"template.illegal-archive",db=>db.query(
+    "UPDATE notification_templates SET status='archived',archived_at=now() WHERE organization_id=$1 AND template_id=$2 AND version=1",
+    [orgA,templateV1.id]
+  )),/cannot deactivate or archive.*enabled published rule/i);
   // Database rule publication also participates in lifecycle serialization and validates channel contracts.
 
   // Published version content is immutable. A new version is separate; the rule remains pinned to v1.

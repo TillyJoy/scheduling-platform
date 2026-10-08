@@ -430,13 +430,13 @@ test("a new worker instance recovers persisted stale delivery and event leases a
     [org,outbox.id,eventLease]
   ));
 
-  // Simulate the original worker stopping without releasing either durable lease.
+  // A separate worker instance is created later; the leased state survives in PostgreSQL.
   const workerBeforeRestart=new NotificationDeliveryWorker({
     transaction:tx,outboxRepository:outboxRepo,eventRepository:eventRepo,notificationEventProcessor:processor,
     notificationRepository:notificationRepo,deliveryAttemptRepository:deliveryRepo,providerRegistry:providers.providers,
     principalFactory:workerPrincipal,now:()=>now,leaseMs:1000,maxAttempts:3,backoff:()=>100
   });
-  assert.ok(workerBeforeRestart);
+  assert.equal(workerBeforeRestart.running,false);
   const persistedBeforeRestart=await tx(principal,"verify.persisted-leases",async db=>{
     const attempt=await deliveryRepo.get({principal,deliveryAttemptId:delivery.id,db});
     const eventRows=await db.query("SELECT status,locked_at,attempts FROM event_outbox WHERE organization_id=$1 AND id=$2",[org,outbox.id]);
@@ -445,6 +445,7 @@ test("a new worker instance recovers persisted stale delivery and event leases a
   assert.ok(persistedBeforeRestart.attempt.lockedAt);
   assert.equal(persistedBeforeRestart.eventRow.status,"processing");
   assert.ok(persistedBeforeRestart.eventRow.locked_at);
+  await workerBeforeRestart.stop();
 
   now=new Date(now.getTime()+2000);
   const workerAfterRestart=new NotificationDeliveryWorker({
@@ -452,11 +453,19 @@ test("a new worker instance recovers persisted stale delivery and event leases a
     notificationRepository:notificationRepo,deliveryAttemptRepository:deliveryRepo,providerRegistry:providers.providers,
     principalFactory:workerPrincipal,now:()=>now,leaseMs:1000,maxAttempts:3,backoff:()=>100
   });
+  assert.notEqual(workerAfterRestart,workerBeforeRestart);
 
   const eventResults=await workerAfterRestart.processOrganization(org);
   assert.equal(eventResults.length,1);
   assert.equal(eventResults[0].outboxId,outbox.id);
-  assert.equal(eventResults[0].status,"published");
+  assert.equal(eventResults[0].status,"failed");
+  const eventState=await tx(principal,"verify.event-recovered",db=>db.query(
+    "SELECT status,locked_at,attempts FROM event_outbox WHERE organization_id=$1 AND id=$2",[org,outbox.id]
+  ));
+  assert.equal(eventState.rows[0].status,"failed");
+  assert.equal(eventState.rows[0].locked_at,null);
+  assert.equal(eventState.rows[0].attempts,2);
+
   const deliveryResults=await workerAfterRestart.processDeliveryAttempts(org);
   assert.equal(deliveryResults.length,1);
   assert.equal(deliveryResults[0].deliveryAttemptId,delivery.id);
@@ -469,7 +478,8 @@ test("a new worker instance recovers persisted stale delivery and event leases a
   });
   assert.equal(recoveredState.attempt.status,"delivered");
   assert.equal(recoveredState.attempt.lockedAt,null);
-  assert.equal(recoveredState.eventRow.status,"published");
+  // Event failure remains separately retryable; delivery recovery does not publish an event.
+  assert.equal(recoveredState.eventRow.status,"failed");
   assert.equal(recoveredState.eventRow.locked_at,null);
-  assert.ok(recoveredState.eventRow.published_at);
+  assert.equal(recoveredState.eventRow.attempts,2);
 });

@@ -171,6 +171,7 @@ class NotificationConfigurationService {
     const item=new NotificationTemplate({...input,organizationId:principal.organizationId,status:"draft"});
     this.#authorize(principal,ACTIONS.TEMPLATE_CREATE,item.organizationId);
     const result=await this.transaction(principal,"notification.configuration.template.create",async db=>{
+      await db.query("SELECT id FROM organizations WHERE id=$1 FOR UPDATE",[principal.organizationId]);
       const existing=await this.templateRepository.getLatest({principal,templateId:item.id,db});
       if(existing) throw new Error("Configuration ID already exists; create the next version of the template instead");
       const created=await this.templateRepository.createDraft({principal,template:item,db});

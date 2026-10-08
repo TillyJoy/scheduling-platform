@@ -38,9 +38,13 @@ class NotificationEventProcessor {
       const refs=rule.templateRefs||(rule.templateIds||[]).map(templateId=>({templateId,version:null}));
       for(const recipientId of recipients) for(const ref of refs) {
         const template=this.templateStore.get(ref.templateId+":"+(ref.version??""))||this.templateStore.get(ref.templateId);
-        if(!template||template.organizationId!==event.organizationId||template.status!=="published") continue;
-        if(ref.version!==null&&ref.version!==undefined&&template.version!==ref.version) continue;
-        if(!rule.allowedChannels.includes(template.channel)) continue;
+        if(!template||template.organizationId!==event.organizationId||template.status!=="published"||
+          (ref.version!==null&&ref.version!==undefined&&template.version!==ref.version)) {
+          throw new Error("Published notification rule references an unavailable or invalid template version");
+        }
+        if(!rule.allowedChannels.includes(template.channel)) {
+          throw new Error("Published notification rule references a template on a disallowed channel");
+        }
         results.push(this.#processOneMemory({principal,event,rule,template,recipientId}));
       }
     }

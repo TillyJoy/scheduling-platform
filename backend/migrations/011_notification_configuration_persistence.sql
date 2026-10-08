@@ -175,11 +175,17 @@ BEGIN
     IF NOT FOUND OR referenced_template.status <> 'published' THEN
       RAISE EXCEPTION 'notification rule references a missing, cross-tenant, or unpublished template version';
     END IF;
+
+    IF NOT EXISTS (
+      SELECT 1 FROM jsonb_array_elements_text(NEW.allowed_channels) AS allowed(channel)
+      WHERE allowed.channel = referenced_template.channel
+    ) THEN
+      RAISE EXCEPTION 'notification rule template channel is not allowed by the rule';
+    END IF;
   END LOOP;
   RETURN NEW;
 END;
 $notif_config$;
-
 DROP TRIGGER IF EXISTS notification_rules_valid_template_refs ON notification_rules;
 CREATE CONSTRAINT TRIGGER notification_rules_valid_template_refs
 AFTER INSERT OR UPDATE ON notification_rules

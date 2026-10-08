@@ -61,6 +61,8 @@ assert.equal([...notificationStore.values()][0].recipientId, "user-1");
 assert.equal([...notificationStore.values()][0].message, "Job job-1 changed from new to ready.");
 assert.equal([...notificationStore.values()][0].sourceEventId, "event-1");
 assert.equal([...notificationStore.values()][0].deliveryKey, "event-1:rule-1:template-1:user-1");
+assert.equal([...notificationStore.values()][0].templateId, "template-1");
+assert.equal([...notificationStore.values()][0].templateVersion, 1);
 
 const replayResults = processor.process({ principal, event });
 assert.equal(replayResults.length, 1);

@@ -124,6 +124,13 @@ test("durable notification configuration pins versions, survives fresh instances
     /cannot archive.*enabled published rule/i
   );
   assert.equal((await services.configurationService.getTemplate({principal:principalA,templateId:templateV1.id,version:1})).status,"published");
+  // Temporary inactivation prevents rule publication/processing but preserves frozen content.
+  await transaction(principalA,"template.temporary-inactive",db=>db.query(
+    "UPDATE notification_templates SET status='inactive' WHERE organization_id=$1 AND template_id=$2 AND version=2",
+    [orgA,templateV1.id]
+  ));
+  assert.equal((await services.configurationService.getTemplate({principal:principalA,templateId:templateV1.id,version:2})).status,"inactive");
+  await assert.rejects(()=>services.configurationService.publishRule({principal:principalA,ruleId:pendingRule.id}),/published template/i);
   // Database enforcement rejects the same unsafe transition when bypassing the service.
   await assert.rejects(()=>transaction(principalA,"template.illegal-archive",db=>db.query(
     "UPDATE notification_templates SET status='archived',archived_at=now() WHERE organization_id=$1 AND template_id=$2 AND version=1",

@@ -214,6 +214,10 @@ test("durable notification configuration pins versions, survives fresh instances
   }
 
   // Audit and configuration are one transaction: a failed audit aborts its template mutation.
+  assert.throws(
+    ()=>new NotificationConfigurationService({templateRepository:services.templateRepository,ruleRepository:services.ruleRepository,transaction}),
+    /required audit persistence/i
+  );
   const failingService=new NotificationConfigurationService({
     templateRepository:services.templateRepository,ruleRepository:services.ruleRepository,transaction,
     auditRepository:{create:async()=>{throw new Error("forced audit failure");}}

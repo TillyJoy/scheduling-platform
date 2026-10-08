@@ -60,6 +60,7 @@ class NotificationEventProcessor {
         for(const ref of rule.templateRefs) {
           const template=await this.configurationService.templateRepository.getVersion({principal,templateId:ref.templateId,version:ref.version,db});
           if(!template||template.status!=="published") throw new Error("Published notification rule references an unavailable template version");
+          if(!rule.allowedChannels.includes(template.channel)) throw new Error("Published notification rule references a template on a disallowed channel");
           templates.push(template);
         }
         byRule.push({rule,templates});

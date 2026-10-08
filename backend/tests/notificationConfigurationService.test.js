@@ -16,10 +16,11 @@ service.createRule({principal:admin,id:"rule-1",organizationId:"org-a",name:"Not
 const rule=service.publishRule({principal:admin,ruleId:"rule-1"});
 assert.equal(rule.status,"published");
 assert.equal(rule.templateRefs[0].version,1);
-assert.throws(()=>service.archiveTemplate({principal:admin,templateId:"template-1",version:1}),/cannot archive.*enabled published rule/i);
-const disabledRuleStore=service.ruleStore.get("rule-1");
-service.ruleStore.set("rule-1",new (require("../src/models/notificationRule").NotificationRule)({...disabledRuleStore,enabled:false}));
-assert.throws(()=>service.archiveTemplate({principal:admin,templateId:"template-1",version:1}),/immutable/i);
+assert.throws(()=>service.archiveTemplate({principal:admin,templateId:"template-1",version:1}),/cannot deactivate or archive.*enabled published rule/i);
+const activeRule=service.ruleStore.get("rule-1");
+service.ruleStore.set("rule-1",new (require("../src/models/notificationRule").NotificationRule)({...activeRule,status:"archived"}));
+const archivedTemplate=service.archiveTemplate({principal:admin,templateId:"template-1",version:1});
+assert.equal(archivedTemplate.status,"archived");
 
 const templateV2=service.createTemplateVersion({principal:admin,templateId:"template-1",input:{body:"Version two {{recipient.first_name}}"}});
 assert.equal(templateV2.version,2);

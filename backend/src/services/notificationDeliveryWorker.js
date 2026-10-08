@@ -59,6 +59,9 @@ class NotificationDeliveryWorker {
   async processOrganization(organizationId) {
     if (!organizationId) throw new Error("organizationId is required");
     const principal = this.principalFactory(organizationId);
+    this.#requireWorkerPrincipal(principal, organizationId, [
+      "event:dispatch", "notification:dispatch", "notification:create"
+    ]);
     const now = this.now();
 
     const stale = await this.transaction(principal, "notification.worker.recover-events", db =>
@@ -103,6 +106,7 @@ class NotificationDeliveryWorker {
   async processDeliveryAttempts(organizationId) {
     if (!organizationId) throw new Error("organizationId is required");
     const principal = this.principalFactory(organizationId);
+    this.#requireWorkerPrincipal(principal, organizationId, ["notification:dispatch"]);
     const now = this.now();
 
     const stale = await this.transaction(principal, "notification.worker.recover-delivery", db =>
@@ -303,6 +307,19 @@ class NotificationDeliveryWorker {
     );
 
     return retryable ? "retry_scheduled" : "failed";
+  }
+
+  #requireWorkerPrincipal(principal, organizationId, requiredPermissions) {
+    if (!principal?.userId || !principal?.organizationId) {
+      throw new Error("Trusted principal is required");
+    }
+    if (
+      principal.organizationId !== organizationId ||
+      !Array.isArray(principal.permissions) ||
+      requiredPermissions.some(permission => !principal.permissions.includes(permission))
+    ) {
+      throw new Error("Not authorized");
+    }
   }
 
   #classifiedError(failureClass, message) {

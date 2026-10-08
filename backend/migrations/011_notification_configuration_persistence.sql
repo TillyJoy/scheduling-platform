@@ -267,7 +267,10 @@ BEGIN
       RAISE EXCEPTION 'notification rule references a missing, cross-tenant, or unpublished template version';
     END IF;
 
-    IF NOT (NEW.allowed_channels ? referenced_template.channel) THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM jsonb_array_elements_text(NEW.allowed_channels) AS allowed(channel)
+      WHERE allowed.channel = referenced_template.channel
+    ) THEN
       RAISE EXCEPTION 'notification rule template channel is not allowed by the rule';
     END IF;
   END LOOP;

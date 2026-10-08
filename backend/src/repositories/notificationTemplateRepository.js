@@ -9,8 +9,8 @@ class NotificationTemplateRepository {
     const max=await db.query("SELECT COALESCE(MAX(version),0)::int AS version FROM notification_templates WHERE organization_id=$1 AND template_id=$2",[principal.organizationId,record.id]);
     const version=Math.max(record.version,max.rows[0].version+1);
     const result=await db.query(
-      \`INSERT INTO notification_templates (organization_id,template_id,version,name,channel,subject,body,variables,status,created_at,updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,'draft',$9,$9) RETURNING *\`,
+      `INSERT INTO notification_templates (organization_id,template_id,version,name,channel,subject,body,variables,status,created_at,updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,'draft',$9,$9) RETURNING *`,
       [principal.organizationId,record.id,version,record.name,record.channel,record.subject,record.body,JSON.stringify(record.variables),this.clock()]
     );
     return this.#map(result.rows[0]);
@@ -22,8 +22,8 @@ class NotificationTemplateRepository {
     if(current.status!=="published") throw new Error("Only a published template version can be versioned");
     const next=new NotificationTemplate({...current,...input,id:templateId,organizationId:principal.organizationId,version:current.version+1,status:"draft",publishedAt:null,archivedAt:null,createdAt:this.clock(),updatedAt:this.clock()});
     const result=await db.query(
-      \`INSERT INTO notification_templates (organization_id,template_id,version,name,channel,subject,body,variables,status,created_at,updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,'draft',$9,$9) RETURNING *\`,
+      `INSERT INTO notification_templates (organization_id,template_id,version,name,channel,subject,body,variables,status,created_at,updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,'draft',$9,$9) RETURNING *`,
       [principal.organizationId,next.id,next.version,next.name,next.channel,next.subject,next.body,JSON.stringify(next.variables),this.clock()]
     );
     return this.#map(result.rows[0]);
@@ -35,8 +35,8 @@ class NotificationTemplateRepository {
     if(before.status==="published") return before;
     if(before.status!=="draft") throw new Error("Only draft template versions can be published");
     const result=await db.query(
-      \`UPDATE notification_templates SET status='published',published_at=$4,updated_at=$4
-       WHERE organization_id=$1 AND template_id=$2 AND version=$3 AND status='draft' RETURNING *\`,
+      `UPDATE notification_templates SET status='published',published_at=$4,updated_at=$4
+       WHERE organization_id=$1 AND template_id=$2 AND version=$3 AND status='draft' RETURNING *`,
       [principal.organizationId,templateId,version,this.clock()]
     );
     if(!result.rows[0]) throw new Error("Notification template version changed concurrently");
@@ -49,8 +49,8 @@ class NotificationTemplateRepository {
     if(current.status==="published") throw new Error("Published template versions are immutable; create a new version instead");
     if(current.status==="archived") return current;
     const result=await db.query(
-      \`UPDATE notification_templates SET status='archived',archived_at=$4,updated_at=$4
-       WHERE organization_id=$1 AND template_id=$2 AND version=$3 AND status IN ('draft','inactive') RETURNING *\`,
+      `UPDATE notification_templates SET status='archived',archived_at=$4,updated_at=$4
+       WHERE organization_id=$1 AND template_id=$2 AND version=$3 AND status IN ('draft','inactive') RETURNING *`,
       [principal.organizationId,templateId,version,this.clock()]
     );
     if(!result.rows[0]) throw new Error("Notification template version changed concurrently");
@@ -64,7 +64,7 @@ class NotificationTemplateRepository {
   async getLatest({principal,templateId,db=this.pool,publishedOnly=false}={}) {
     this.#requirePrincipal(principal);
     const result=await db.query(
-      \`SELECT * FROM notification_templates WHERE organization_id=$1 AND template_id=$2 \${publishedOnly?"AND status='published'":""} ORDER BY version DESC LIMIT 1\`,
+      `SELECT * FROM notification_templates WHERE organization_id=$1 AND template_id=$2 ${publishedOnly?"AND status='published'":""} ORDER BY version DESC LIMIT 1`,
       [principal.organizationId,templateId]
     );
     return result.rows[0]?this.#map(result.rows[0]):null;
@@ -72,7 +72,7 @@ class NotificationTemplateRepository {
   async list({principal,includeVersions=true,db=this.pool}={}) {
     this.#requirePrincipal(principal);
     const result=await db.query(
-      \`SELECT * FROM notification_templates WHERE organization_id=$1 ORDER BY template_id,version DESC\`,
+      `SELECT * FROM notification_templates WHERE organization_id=$1 ORDER BY template_id,version DESC`,
       [principal.organizationId]
     );
     const rows=result.rows.map(row=>this.#map(row));

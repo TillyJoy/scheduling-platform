@@ -1,2 +1,8 @@
 const test=require("node:test"),assert=require("node:assert/strict"),fs=require("node:fs"),vm=require("node:vm");function shell(){const c={window:{}};vm.runInNewContext(fs.readFileSync("src/appShell.js","utf8"),c);return c.window.SchedulingAppShell}function root(){return{innerHTML:""}}test("loading and unauthenticated states render",()=>{const s=shell(),r=root();s.renderLoading(r);assert.match(r.innerHTML,/Loading application/);s.renderUnauthenticated(r);assert.match(r.innerHTML,/Sign in/);assert.match(r.innerHTML,/Development sign in/)});test("authenticated state renders trusted user and organization context",()=>{const s=shell(),r=root();s.renderAuthenticated(r,{userId:"user-1",organizationId:"org-1",permissions:["job:read","job:create"]});assert.match(r.innerHTML,/user-1/);assert.match(r.innerHTML,/org-1/);assert.match(r.innerHTML,/2 permissions/);assert.doesNotMatch(r.innerHTML,/organizationId.*input/i)});
 test("browser application entrypoint parses as JavaScript",()=>{const source=fs.readFileSync("src/app.js","utf8");assert.doesNotThrow(()=>new vm.Script(source));});
+
+test("responsive layout styles allow narrow viewport content to shrink",()=>{
+  const html=fs.readFileSync("src/index.html","utf8");
+  assert.match(html,/.content\{[^}]*min-width:0/);
+  assert.match(html,/@media\(max-width:720px\)\{[\s\S]*?\.context-bar div\{min-width:0/);
+});

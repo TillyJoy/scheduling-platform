@@ -43,6 +43,7 @@ const FRONTEND_DIR = path.resolve(__dirname, "../../frontend/src");
 function createAppState(seed = {}) {
   const resources = seed.resources || [new Resource({
     id: "auditor-1",
+    organizationId: "demo-org",
     name: "Demo Auditor",
     role: "auditor",
     qualifications: ["AMP", "WX", "ASHP", "HS"]
@@ -246,7 +247,7 @@ function principal() {
   return {
     userId: "demo-user",
     organizationId: "demo-org",
-    permissions: ["job:create", "job:read", "workOrder:create", "workOrder:read", "appointment:create", "appointment:read", "appointment:update", "appointment:confirm", "appointment:cancel", "fieldVisit:create", "fieldVisit:read", "fieldVisit:update", "actualWork:create", "actualWork:read", "fieldExecution:sync"]
+    permissions: ["job:create", "job:read", "workOrder:create", "workOrder:read", "resource:read", "appointment:create", "appointment:read", "appointment:update", "appointment:confirm", "appointment:cancel", "fieldVisit:create", "fieldVisit:read", "fieldVisit:update", "actualWork:create", "actualWork:read", "fieldExecution:sync"]
   };
 }
 
@@ -444,7 +445,7 @@ function createHandler(state, {
         return json(res, 201, workOrder);
       }
       if (req.method === "GET" && path === "/api/resources") {
-        return json(res, 200, state.resources.filter(resource => resource.active !== false));
+        return json(res, 200, (await state.resourceService.list({ principal: p })).filter(resource => resource.active !== false));
       }
       if (req.method === "GET" && path === "/api/appointments") {
         return json(res, 200, state.appointmentService.list({ principal: p }).map(appointment => ({
@@ -570,6 +571,7 @@ function createHandler(state, {
       return json(res, 404, { error: "Route not found" });
     } catch (error) {
       if (error.statusCode === 413) return json(res, 413, { error: error.message });
+      if (error.message === "Not authorized") return json(res, 403, { error: error.message });
       const status = Number.isInteger(error.statusCode) ? error.statusCode : 500;
       if (status >= 500) {
         console.error("Unhandled application error", error);

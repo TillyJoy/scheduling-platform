@@ -82,6 +82,151 @@ test("authenticated principal context is trusted and client organization headers
   }
 });
 
+test("development demo login grants resource read without weakening resource authorization", async () => {
+  const authenticationService = new AuthenticationService({ secret: AUTH_SECRET });
+  const state = createAppState({
+    authenticationService,
+    resources: [{ id: "demo-resource", organizationId: "demo-org", name: "Demo resource", active: true }]
+  });
+  const server = http.createServer(createHandler(state, { allowDevelopmentBypass: false }));
+  const previousNodeEnv = process.env.NODE_ENV;
+  process.env.NODE_ENV = "development";
+  await new Promise(resolve => server.listen(0, resolve));
+  try {
+    const login = await request(server, "POST", "/api/auth/dev-login", {});
+    assert.equal(login.status, 200);
+    assert.equal(login.body.organizationId, "demo-org");
+    const auth = { Authorization: `Bearer ${login.body.token}` };
+    const context = await request(server, "GET", "/api/auth/me", null, auth);
+    assert.equal(context.status, 200);
+    assert.ok(context.body.permissions.includes("resource:read"));
+
+    const resources = await request(server, "GET", "/api/resources", null, auth);
+    assert.equal(resources.status, 200);
+    assert.ok(Array.isArray(resources.body));
+    assert.equal(resources.body.length, 1);
+    assert.equal(resources.body[0].organizationId, "demo-org");
+
+    const noPermission = authenticationService.issueToken({
+      userId: "job-reader",
+      organizationId: "demo-org",
+      permissions: ["job:read"]
+    });
+    const forbidden = await request(server, "GET", "/api/resources", null, {
+      Authorization: `Bearer ${noPermission}`
+    });
+    assert.equal(forbidden.status, 403);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+    if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousNodeEnv;
+  }
+});
+
+test("default demo resource belongs to demo organization and remains visible only to authorized tenant readers", async () => {
+  const authenticationService = new AuthenticationService({ secret: AUTH_SECRET });
+  const state = createAppState({ authenticationService });
+  const demoResource = state.resources.find(resource => resource.id === "auditor-1");
+  assert.equal(demoResource.organizationId, "demo-org");
+  assert.deepEqual(demoResource.qualifications, ["AMP", "WX", "ASHP", "HS"]);
+
+  const server = http.createServer(createHandler(state, { allowDevelopmentBypass: false }));
+  await new Promise(resolve => server.listen(0, resolve));
+  try {
+    const demoToken = authenticationService.issueToken({
+      userId: "demo-reader",
+      organizationId: "demo-org",
+      permissions: ["resource:read"]
+    });
+    const visible = await request(server, "GET", "/api/resources", null, {
+      Authorization: `Bearer ${demoToken}`
+    });
+    assert.equal(visible.status, 200);
+    assert.deepEqual(visible.body.map(resource => resource.id), ["auditor-1"]);
+
+    const otherTenantToken = authenticationService.issueToken({
+      userId: "other-reader",
+      organizationId: "other-org",
+      permissions: ["resource:read"]
+    });
+    const otherTenant = await request(server, "GET", "/api/resources", null, {
+      Authorization: `Bearer ${otherTenantToken}`
+    });
+    assert.equal(otherTenant.status, 200);
+    assert.deepEqual(otherTenant.body, []);
+
+    const inactiveToken = authenticationService.issueToken({
+      userId: "inactive-reader",
+      organizationId: "demo-org",
+      permissions: ["resource:read"]
+    });
+    const inactiveServerState = createAppState({
+      authenticationService,
+      resources: [demoResource, { id: "inactive-resource", organizationId: "demo-org", active: false }]
+    });
+    const inactiveServer = http.createServer(createHandler(inactiveServerState, { allowDevelopmentBypass: false }));
+    await new Promise(resolve => inactiveServer.listen(0, resolve));
+    try {
+      const activeOnly = await request(inactiveServer, "GET", "/api/resources", null, {
+        Authorization: `Bearer ${inactiveToken}`
+      });
+      assert.equal(activeOnly.status, 200);
+      assert.deepEqual(activeOnly.body.map(resource => resource.id), ["auditor-1"]);
+    } finally {
+      await new Promise(resolve => inactiveServer.close(resolve));
+    }
+
+    const noPermissionToken = authenticationService.issueToken({
+      userId: "job-reader",
+      organizationId: "demo-org",
+      permissions: ["job:read"]
+    });
+    const forbidden = await request(server, "GET", "/api/resources", null, {
+      Authorization: `Bearer ${noPermissionToken}`
+    });
+    assert.equal(forbidden.status, 403);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
+test("resource API uses trusted organization and resource permission boundaries", async () => {
+  const authenticationService = new AuthenticationService({ secret: AUTH_SECRET });
+  const state = createAppState({
+    resources: [
+      { id: "resource-demo", organizationId: "demo-org", active: true },
+      { id: "resource-other", organizationId: "other-org", active: true }
+    ],
+    authenticationService
+  });
+  const server = http.createServer(createHandler(state, { allowDevelopmentBypass: false }));
+  await new Promise(resolve => server.listen(0, resolve));
+  try {
+    const token = authenticationService.issueToken({
+      userId: "resource-reader",
+      organizationId: "demo-org",
+      permissions: ["resource:read"]
+    });
+    const response = await request(server, "GET", "/api/resources", null, {
+      Authorization: `Bearer ${token}`
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(response.body.map(resource => resource.id), ["resource-demo"]);
+
+    const forbiddenToken = authenticationService.issueToken({
+      userId: "job-reader",
+      organizationId: "demo-org",
+      permissions: ["job:read"]
+    });
+    const forbidden = await request(server, "GET", "/api/resources", null, {
+      Authorization: `Bearer ${forbiddenToken}`
+    });
+    assert.equal(forbidden.status, 403);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
 test("protected API routes require authentication", async () => {
   const { server, token } = authenticatedServer();
   await new Promise(resolve => server.listen(0, resolve));

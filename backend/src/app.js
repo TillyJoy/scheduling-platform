@@ -43,6 +43,7 @@ const FRONTEND_DIR = path.resolve(__dirname, "../../frontend/src");
 function createAppState(seed = {}) {
   const resources = seed.resources || [new Resource({
     id: "auditor-1",
+    organizationId: "demo-org",
     name: "Demo Auditor",
     role: "auditor",
     qualifications: ["AMP", "WX", "ASHP", "HS"]

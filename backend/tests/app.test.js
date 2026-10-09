@@ -82,6 +82,47 @@ test("authenticated principal context is trusted and client organization headers
   }
 });
 
+test("development demo login grants resource read without weakening resource authorization", async () => {
+  const authenticationService = new AuthenticationService({ secret: AUTH_SECRET });
+  const state = createAppState({
+    authenticationService,
+    resources: [{ id: "demo-resource", organizationId: "demo-org", name: "Demo resource", active: true }]
+  });
+  const server = http.createServer(createHandler(state, { allowDevelopmentBypass: false }));
+  const previousNodeEnv = process.env.NODE_ENV;
+  process.env.NODE_ENV = "development";
+  await new Promise(resolve => server.listen(0, resolve));
+  try {
+    const login = await request(server, "POST", "/api/auth/dev-login", {});
+    assert.equal(login.status, 200);
+    assert.equal(login.body.organizationId, "demo-org");
+    const auth = { Authorization: `Bearer ${login.body.token}` };
+    const context = await request(server, "GET", "/api/auth/me", null, auth);
+    assert.equal(context.status, 200);
+    assert.ok(context.body.permissions.includes("resource:read"));
+
+    const resources = await request(server, "GET", "/api/resources", null, auth);
+    assert.equal(resources.status, 200);
+    assert.ok(Array.isArray(resources.body));
+    assert.equal(resources.body.length, 1);
+    assert.equal(resources.body[0].organizationId, "demo-org");
+
+    const noPermission = authenticationService.issueToken({
+      userId: "job-reader",
+      organizationId: "demo-org",
+      permissions: ["job:read"]
+    });
+    const forbidden = await request(server, "GET", "/api/resources", null, {
+      Authorization: `Bearer ${noPermission}`
+    });
+    assert.equal(forbidden.status, 403);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+    if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousNodeEnv;
+  }
+});
+
 test("resource API uses trusted organization and resource permission boundaries", async () => {
   const authenticationService = new AuthenticationService({ secret: AUTH_SECRET });
   const state = createAppState({

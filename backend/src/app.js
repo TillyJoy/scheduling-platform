@@ -570,6 +570,7 @@ function createHandler(state, {
       return json(res, 404, { error: "Route not found" });
     } catch (error) {
       if (error.statusCode === 413) return json(res, 413, { error: error.message });
+      if (error.message === "Not authorized") return json(res, 403, { error: error.message });
       const status = Number.isInteger(error.statusCode) ? error.statusCode : 500;
       if (status >= 500) {
         console.error("Unhandled application error", error);

@@ -123,6 +123,73 @@ test("development demo login grants resource read without weakening resource aut
   }
 });
 
+test("default demo resource belongs to demo organization and remains visible only to authorized tenant readers", async () => {
+  const authenticationService = new AuthenticationService({ secret: AUTH_SECRET });
+  const state = createAppState({ authenticationService });
+  const demoResource = state.resources.find(resource => resource.id === "auditor-1");
+  assert.equal(demoResource.organizationId, "demo-org");
+  assert.deepEqual(demoResource.qualifications, ["AMP", "WX", "ASHP", "HS"]);
+
+  const server = http.createServer(createHandler(state, { allowDevelopmentBypass: false }));
+  await new Promise(resolve => server.listen(0, resolve));
+  try {
+    const demoToken = authenticationService.issueToken({
+      userId: "demo-reader",
+      organizationId: "demo-org",
+      permissions: ["resource:read"]
+    });
+    const visible = await request(server, "GET", "/api/resources", null, {
+      Authorization: `Bearer ${demoToken}`
+    });
+    assert.equal(visible.status, 200);
+    assert.deepEqual(visible.body.map(resource => resource.id), ["auditor-1"]);
+
+    const otherTenantToken = authenticationService.issueToken({
+      userId: "other-reader",
+      organizationId: "other-org",
+      permissions: ["resource:read"]
+    });
+    const otherTenant = await request(server, "GET", "/api/resources", null, {
+      Authorization: `Bearer ${otherTenantToken}`
+    });
+    assert.equal(otherTenant.status, 200);
+    assert.deepEqual(otherTenant.body, []);
+
+    const inactiveToken = authenticationService.issueToken({
+      userId: "inactive-reader",
+      organizationId: "demo-org",
+      permissions: ["resource:read"]
+    });
+    const inactiveServerState = createAppState({
+      authenticationService,
+      resources: [demoResource, { id: "inactive-resource", organizationId: "demo-org", active: false }]
+    });
+    const inactiveServer = http.createServer(createHandler(inactiveServerState, { allowDevelopmentBypass: false }));
+    await new Promise(resolve => inactiveServer.listen(0, resolve));
+    try {
+      const activeOnly = await request(inactiveServer, "GET", "/api/resources", null, {
+        Authorization: `Bearer ${inactiveToken}`
+      });
+      assert.equal(activeOnly.status, 200);
+      assert.deepEqual(activeOnly.body.map(resource => resource.id), ["auditor-1"]);
+    } finally {
+      await new Promise(resolve => inactiveServer.close(resolve));
+    }
+
+    const noPermissionToken = authenticationService.issueToken({
+      userId: "job-reader",
+      organizationId: "demo-org",
+      permissions: ["job:read"]
+    });
+    const forbidden = await request(server, "GET", "/api/resources", null, {
+      Authorization: `Bearer ${noPermissionToken}`
+    });
+    assert.equal(forbidden.status, 403);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
 test("resource API uses trusted organization and resource permission boundaries", async () => {
   const authenticationService = new AuthenticationService({ secret: AUTH_SECRET });
   const state = createAppState({

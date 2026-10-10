@@ -11,12 +11,18 @@ class NotificationRepository {
       `INSERT INTO notifications
        (id,organization_id,recipient_id,severity,title,message,type,icon,color,related_entity_type,related_entity_id,source_event_id,
         source_event_type,delivery_key,template_id,template_version,metadata,status,requires_acknowledgement,created_at,acknowledged_at,dismissed_at,expires_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17::jsonb,$18,$19,$20,$21,$22,$23) RETURNING *`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17::jsonb,$18,$19,$20,$21,$22,$23)
+       ON CONFLICT (organization_id,delivery_key) DO NOTHING RETURNING *`,
       [record.id,principal.organizationId,record.recipientId,record.severity,record.title,record.message,record.type,record.icon,record.color,
        record.relatedEntityType,record.relatedEntityId,record.sourceEventId,record.sourceEventType,record.deliveryKey,record.templateId,record.templateVersion,
        JSON.stringify(record.metadata ?? {}),record.status,record.requiresAcknowledgement,record.createdAt,record.acknowledgedAt,record.dismissedAt,record.expiresAt]
     );
-    return this.#map(result.rows[0]);
+    if (result.rows[0]) return this.#map(result.rows[0]);
+    if (record.deliveryKey) {
+      const existing = await this.findByDeliveryKey({ principal, deliveryKey: record.deliveryKey, db });
+      if (existing) return existing;
+    }
+    throw new Error("Notification could not be created");
   }
 
   async findByDeliveryKey({ principal, deliveryKey, db=this.pool }) {

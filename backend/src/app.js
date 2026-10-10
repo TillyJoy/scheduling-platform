@@ -39,6 +39,10 @@ const { NotificationDeliveryAttemptRepository } = require("./repositories/notifi
 const { NotificationDeliveryWorker } = require("./services/notificationDeliveryWorker");
 const { NotificationProviderRegistry } = require("./services/notificationProviderRegistry");
 const { withTransaction } = require("./database");
+const { NotificationConfigurationService } = require("./services/notificationConfigurationService");
+const { NotificationTemplateRepository } = require("./repositories/notificationTemplateRepository");
+const { NotificationRuleRepository } = require("./repositories/notificationRuleRepository");
+const { AuditEventRepository } = require("./repositories/auditEventRepository");
 
 const MAX_BODY_BYTES = 1024 * 1024;
 const FRONTEND_FILES = {
@@ -110,14 +114,30 @@ function createAppState(seed = {}) {
     outboxRepository: domainEventOutboxRepository,
     transaction
   });
+  const notificationTemplateRepository = databasePool ? new NotificationTemplateRepository({ pool: databasePool }) : null;
+  const notificationRuleRepository = databasePool ? new NotificationRuleRepository({ pool: databasePool, templateRepository: notificationTemplateRepository }) : null;
+  const auditRepository = databasePool ? new AuditEventRepository({ pool: databasePool }) : null;
+  const notificationStore = seed.notificationStore || new Map();
+  const notificationConfigurationService = new NotificationConfigurationService({
+    templateStore: seed.notificationTemplateStore || new Map(),
+    ruleStore: seed.notificationRuleStore || new Map(),
+    auditStore: auditEvents,
+    ...(databasePool ? { templateRepository: notificationTemplateRepository, ruleRepository: notificationRuleRepository, auditRepository, transaction } : {})
+  });
   const notificationService = new NotificationService({
+    notificationStore,
     notificationRepository,
+    auditRepository,
     transaction,
     auditStore: auditEvents
   });
   const notificationEventProcessor = new NotificationEventProcessor({
+    ruleStore: notificationConfigurationService.ruleStore,
+    templateStore: notificationConfigurationService.templateStore,
     notificationService,
-    deliveryAttemptRepository: notificationDeliveryAttemptRepository
+    deliveryAttemptRepository: notificationDeliveryAttemptRepository,
+    configurationService: notificationConfigurationService,
+    ...(databasePool ? { transaction, durableConfiguration: true } : {})
   });
   const notificationProviderRegistry = new NotificationProviderRegistry();
   const notificationDeliveryWorker = databasePool ? new NotificationDeliveryWorker({
@@ -280,6 +300,15 @@ function createAppState(seed = {}) {
     domainEventOutboxService,
     notificationService,
     notificationEventProcessor,
+    notificationDeliveryWorker,
+    notificationProviderRegistry,
+    notificationConfigurationService,
+    notificationStore,
+    notificationTemplateRepository,
+    notificationRuleRepository,
+    notificationRepository,
+    notificationDeliveryAttemptRepository,
+    auditRepository,
     demoAvailability,
     schedulingService,
     statusConfigurationService,

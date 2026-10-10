@@ -62,6 +62,23 @@ Restriction/unservable alerts are represented through the same configurable rule
 
 This is an architectural contract. It does not by itself imply implementation of the capabilities below.
 
+
+## Durable persistence and version-pinning contract
+
+Notification rules and template versions are persisted in PostgreSQL as organization-scoped configuration records. Durable reads and writes use the trusted principal's organization context and the database's forced row-level security policies. Configuration create, publish, archive, and version-creation mutations write audit events in the same database transaction as the mutation.
+
+A template has a stable logical template ID and immutable positive integer version. A new edit creates a new draft version; publishing does not alter previously published content. Published content is immutable, while lifecycle status changes to inactive or archived do not rewrite content or identity.
+
+Lifecycle safety policy: an enabled published rule may only reference a published exact template version. Transitioning a published template version to inactive or archived is rejected while any enabled published rule references it. The administrator must first archive each affected rule; lifecycle changes do not rewrite or repoint rule references. Temporary deactivation (inactive) remains distinct from archival and is available for unreferenced versions, preserving their historical content while preventing new publication against that version. The database enforces the same lifecycle guard for direct writes, and event processing fails deterministically rather than substituting a newer version when a published rule's dependency is unavailable.
+
+When a rule is created or published, it stores explicit template references containing both template ID and version. A published rule therefore pins an exact published template version; publishing a newer version does not change the version used by that rule. A rule can only be published when every referenced version exists in the same organization, is published, and its channel is allowed by the rule. Database constraints/triggers revalidate exact-version, status, tenant, and allowed-channel compatibility at write time.
+
+Version allocation is serialized on the tenant's organization row within the caller's transaction. Every new draft receives the next unused version number, including when more than one creation request races or another draft already exists. A committed draft version is never silently reused.
+
+During durable event processing, the processor resolves the published matching rules and their exact template versions from PostgreSQL in a single short-lived read transaction. It releases the configuration transaction before notification creation or any external delivery sink handoff. Resulting notification records retain the exact template ID and template version used to render them. Replay deduplication continues to use the organization-scoped, stable event/rule/template/recipient delivery key; configuration versioning does not create duplicate notification requests.
+
+When database-backed configuration repositories are not provided, the existing in-memory configuration path remains available for tests and no-database development mode. Durable configuration persistence does not constitute a queue and does not perform provider delivery itself.
+
 ## Deliberate non-goals
 
 This increment does not implement delivery providers, retries, rate limiting, user communication preferences, event dispatch, recipient resolution execution, or the administration UI.

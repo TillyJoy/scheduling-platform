@@ -170,9 +170,15 @@ test("browser-created appointment remains durable after application restart", as
 
     const workOrderSelect = page.locator("#work-order-select");
     await expect(workOrderSelect).toBeVisible();
+    // The create-work-order click handler reloads the scheduler asynchronously
+    // after the POST completes. Wait for that UI refresh before reading the value.
+    if (workOrderId) {
+      await expect(workOrderSelect).toHaveValue(workOrderId);
+    } else {
+      await expect(workOrderSelect).toHaveValue(/.+/);
+    }
     const selectedWorkOrderId = await workOrderSelect.inputValue();
     expect(selectedWorkOrderId).toBeTruthy();
-    if (workOrderId) expect(selectedWorkOrderId).toBe(workOrderId);
 
     await expect(page.locator("#schedule-date")).toHaveValue(scheduledDate);
     const slot = page.locator("#slots .slot").first();

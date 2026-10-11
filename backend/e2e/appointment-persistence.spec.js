@@ -180,9 +180,16 @@ test("browser-created appointment remains durable after application restart", as
     const selectedWorkOrderId = await workOrderSelect.inputValue();
     expect(selectedWorkOrderId).toBeTruthy();
 
-    await expect(page.locator("#schedule-date")).toHaveValue(scheduledDate);
+    const scheduleDate = page.locator("#schedule-date");
+    await expect(scheduleDate).toHaveValue(scheduledDate);
+    // Creating a work order can refresh the scheduler using its previous date.
+    // Explicitly dispatch the UI's change event and wait for availability for
+    // the requested date before choosing a slot.
+    await scheduleDate.dispatchEvent("change");
     const slot = page.locator("#slots .slot").first();
     await expect(slot).toBeVisible();
+    await expect.poll(async () => (await slot.getAttribute("data-start"))?.slice(0, 10))
+      .toBe(scheduledDate);
     const slotStart = await slot.getAttribute("data-start");
     const slotEnd = await slot.getAttribute("data-end");
     expect(slotStart.slice(0, 10)).toBe(scheduledDate);

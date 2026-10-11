@@ -265,6 +265,12 @@ async function ensureDurableDemoData(state) {
        VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING`,
       ["client-1", "demo-org", "Demo", "Client"]
     );
+    await db.query(
+      `INSERT INTO properties (id, organization_id, address, city, state)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (organization_id, id) DO NOTHING`,
+      ["property-1", "demo-org", "123 Main St", "Demo City", "MA"]
+    );
   });
   const demoResources = await state.resourceService.list({ principal: demoPrincipal });
   if (!demoResources.some(resource => resource.id === "auditor-1")) {
@@ -467,7 +473,8 @@ function createHandler(state, {
         return json(res, 200, resources.filter(resource => resource.active !== false));
       }
       if (req.method === "GET" && path === "/api/appointments") {
-        return json(res, 200, state.appointmentService.list({ principal: p }).map(appointment => ({
+        const appointments = await state.appointmentService.list({ principal: p });
+        return json(res, 200, appointments.map(appointment => ({
           ...appointment,
           startTime: appointment.startTime.toISOString(),
           endTime: appointment.endTime.toISOString()

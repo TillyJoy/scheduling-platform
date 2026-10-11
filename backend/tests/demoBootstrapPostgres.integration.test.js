@@ -83,6 +83,12 @@ test("database-backed development startup persists and scopes the demo resource"
     assert.equal(demoResources.body[0].organizationId, "demo-org");
     assert.equal(demoResources.body[0].name, "Demo Auditor");
 
+    const demoProperties = await first.databasePool.query(
+      "SELECT id, organization_id, address FROM properties WHERE organization_id=$1 AND id=$2",
+      ["demo-org", "property-1"]
+    );
+    assert.deepEqual(demoProperties.rows, [{ id: "property-1", organization_id: "demo-org", address: "123 Main St" }]);
+
     const otherTenantToken = first.state.authenticationService.issueToken({
       userId: "other-organization-user",
       organizationId: "other-org",
@@ -100,6 +106,11 @@ test("database-backed development startup persists and scopes the demo resource"
     const resourcesAfterRepeatedStartup = await request(second.server, "GET", "/api/resources", secondLogin.body.token);
     assert.equal(resourcesAfterRepeatedStartup.status, 200);
     assert.deepEqual(resourcesAfterRepeatedStartup.body.map(resource => resource.id), ["auditor-1"]);
+    const propertiesAfterRepeatedStartup = await second.databasePool.query(
+      "SELECT count(*) AS count FROM properties WHERE organization_id=$1 AND id=$2",
+      ["demo-org", "property-1"]
+    );
+    assert.equal(Number(propertiesAfterRepeatedStartup.rows[0].count), 1);
   } finally {
     try {
       for (const { server, databasePool } of started.reverse()) {

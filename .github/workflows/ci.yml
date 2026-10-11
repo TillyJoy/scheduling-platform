@@ -43,6 +43,10 @@ jobs:
         working-directory: backend
         run: npm install --no-audit --no-fund
 
+      - name: Install Chromium and system dependencies
+        working-directory: backend
+        run: npx playwright install --with-deps chromium
+
       - name: Run backend tests
         working-directory: backend
         env:
@@ -86,3 +90,14 @@ jobs:
           TOKEN=$(curl --silent --fail -X POST http://127.0.0.1:3000/api/auth/dev-login | node -e 'let s=""; process.stdin.on("data", d => s+=d); process.stdin.on("end", () => process.stdout.write(JSON.parse(s).token))')
           curl --silent --fail -H "Authorization: Bearer $TOKEN" http://127.0.0.1:3000/api/jobs > /tmp/jobs.json
           grep -q 'Demo Client' /tmp/jobs.json
+
+      - name: Run PostgreSQL-backed browser appointment persistence acceptance
+        working-directory: backend
+        env:
+          DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/scheduling_platform_test
+          DATABASE_SSL: "false"
+          RUN_POSTGRES_TESTS: 1
+          NODE_ENV: development
+          ALLOW_DEVELOPMENT_AUTH_BYPASS: "false"
+          AUTH_SECRET: appointment-browser-acceptance-secret-2026
+        run: npm run test:browser

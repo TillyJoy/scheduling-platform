@@ -1,5 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const { randomUUID } = require("node:crypto");
 const http = require("node:http");
 const { once } = require("node:events");
 
@@ -45,9 +46,14 @@ test("database-backed development startup persists and scopes the demo resource"
     NODE_ENV: process.env.NODE_ENV,
     AUTH_SECRET: process.env.AUTH_SECRET,
     PORT: process.env.PORT,
+    DATABASE_URL: process.env.DATABASE_URL,
     DATABASE_SSL: process.env.DATABASE_SSL,
     ALLOW_DEVELOPMENT_AUTH_BYPASS: process.env.ALLOW_DEVELOPMENT_AUTH_BYPASS
   };
+  const { Pool } = require("pg");
+  const adminPool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: false });
+  const isolatedDatabaseName = `scheduling_platform_demo_bootstrap_${randomUUID().replaceAll("-", "")}`;
+  let isolatedDatabaseCreated = false;
   process.env.NODE_ENV = "development";
   process.env.AUTH_SECRET = "isolated-postgres-demo-bootstrap-test-secret";
   process.env.PORT = "0";
@@ -56,6 +62,14 @@ test("database-backed development startup persists and scopes the demo resource"
 
   const started = [];
   try {
+    const identity = await adminPool.query("SELECT current_database() AS database_name");
+    assert.equal(identity.rows[0].database_name, TEST_DATABASE_NAME);
+    await adminPool.query(`CREATE DATABASE "${isolatedDatabaseName}"`);
+    isolatedDatabaseCreated = true;
+    const isolatedDatabaseUrl = new URL(previousEnvironment.DATABASE_URL);
+    isolatedDatabaseUrl.pathname = `/${isolatedDatabaseName}`;
+    process.env.DATABASE_URL = isolatedDatabaseUrl.toString();
+
     const { start } = require("../src/index");
     const first = await start();
     started.push(first);
@@ -87,13 +101,18 @@ test("database-backed development startup persists and scopes the demo resource"
     assert.equal(resourcesAfterRepeatedStartup.status, 200);
     assert.deepEqual(resourcesAfterRepeatedStartup.body.map(resource => resource.id), ["auditor-1"]);
   } finally {
-    for (const { server, databasePool } of started.reverse()) {
-      if (server.listening) await new Promise(resolve => server.close(resolve));
-      await databasePool.end();
-    }
-    for (const [key, value] of Object.entries(previousEnvironment)) {
-      if (value === undefined) delete process.env[key];
-      else process.env[key] = value;
+    try {
+      for (const { server, databasePool } of started.reverse()) {
+        if (server.listening) await new Promise(resolve => server.close(resolve));
+        await databasePool.end();
+      }
+      if (isolatedDatabaseCreated) await adminPool.query(`DROP DATABASE "${isolatedDatabaseName}"`);
+    } finally {
+      await adminPool.end();
+      for (const [key, value] of Object.entries(previousEnvironment)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
     }
   }
 });

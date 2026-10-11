@@ -77,7 +77,7 @@ class ActualWorkService {
       if (existing) throw new Error("Actual work ID already exists");
       const saved = await this.actualWorkRepository.create({ principal, work, db: client });
       if (deferEvents) postCommit.push(() => this.#record(principal, saved, occurredAt === null ? new Date() : new Date(occurredAt)));
-      else this.#record(principal, saved, occurredAt === null ? new Date() : new Date(occurredAt));
+      else await this.#record(principal, saved, occurredAt === null ? new Date() : new Date(occurredAt), client);
       return saved;
     };
     return db ? write(db) : this.#inTransaction(principal, "actual-work.create", write);
@@ -98,7 +98,7 @@ class ActualWorkService {
     return this.#clone(work);
   }
 
-  #record(principal, work, occurredAt) {
+  async #record(principal, work, occurredAt, db = null) {
     this.auditStore.push(new AuditEvent({
       id: "actual-work.created:" + work.id + ":" + (this.auditStore.length + 1),
       organizationId: principal.organizationId, userId: principal.userId,
@@ -110,9 +110,9 @@ class ActualWorkService {
       }, createdAt: occurredAt
     }));
     if (this.domainEventService) {
-      this.domainEventService.emit({
+      await this.domainEventService.emit({
         principal, id: crypto.randomUUID(), eventType: "actual_work.recorded",
-        entityType: "actual_work", entityId: work.id, occurredAt,
+        entityType: "actual_work", entityId: work.id, occurredAt, db,
         payload: {
           fieldVisitId: work.fieldVisitId, workOrderId: work.workOrderId, resourceId: work.resourceId,
           description: work.description, actualStartTime: work.actualStartTime, actualEndTime: work.actualEndTime,

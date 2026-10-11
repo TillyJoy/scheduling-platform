@@ -107,7 +107,7 @@ class FieldVisitService {
       if (existing) throw new Error("Field visit ID already exists");
       const saved = await this.fieldVisitRepository.create({ principal, visit, db: client });
       if (deferEvents) postCommit.push(() => this.#record(principal, saved, "field-visit.created", null, saved, eventTime));
-      else this.#record(principal, saved, "field-visit.created", null, saved, eventTime);
+      else await this.#record(principal, saved, "field-visit.created", null, saved, eventTime, client);
       return saved;
     };
     return db ? write(db) : this.#inTransaction(principal, "field-visit.create", write);
@@ -127,7 +127,7 @@ class FieldVisitService {
         principal, fieldVisit: visit, expectedVersion: previousVersion, db: client
       });
       if (deferEvents) postCommit.push(() => this.#recordLifecycle(principal, saved, action, args));
-      else this.#recordLifecycle(principal, saved, action, args);
+      else await this.#recordLifecycle(principal, saved, action, args, client);
       return saved;
     };
     return args.db ? run(args.db) : this.#inTransaction(principal, "field-visit." + action, run);
@@ -224,19 +224,19 @@ class FieldVisitService {
     return this.#clone(visit);
   }
 
-  #recordLifecycle(principal, visit, action, args) {
+  async #recordLifecycle(principal, visit, action, args, db = null) {
     const times = {
       arrive: visit.arrivedAt, start: visit.actualStartTime, stop: visit.actualEndTime,
       complete: visit.completedAt, closeIncomplete: visit.closedAt
     };
-    this.#record(principal, visit, "field-visit." + ({ arrive: "arrived", start: "started", stop: "stopped", complete: "completed", closeIncomplete: "closed_incomplete" }[action]), null, {
+    await this.#record(principal, visit, "field-visit." + ({ arrive: "arrived", start: "started", stop: "stopped", complete: "completed", closeIncomplete: "closed_incomplete" }[action]), null, {
       ...visit, version: visit.version
-    }, times[action] || this.clock());
+    }, times[action] || this.clock(), db);
   }
 
-  #record(principal, visit, action, previousValue, newValue, occurredAt) {
+  async #record(principal, visit, action, previousValue, newValue, occurredAt, db = null) {
     this.#audit(principal, action, visit.id, previousValue, newValue, occurredAt);
-    this.#emit(principal, action.replaceAll("-", "_"), visit, occurredAt);
+    await this.#emit(principal, action.replaceAll("-", "_"), visit, occurredAt, db);
   }
 
   #audit(principal, action, entityId, previousValue, newValue, createdAt = this.clock()) {
@@ -248,11 +248,11 @@ class FieldVisitService {
     }));
   }
 
-  #emit(principal, eventType, visit, occurredAt = this.clock()) {
+  async #emit(principal, eventType, visit, occurredAt = this.clock(), db = null) {
     if (!this.domainEventService) return;
-    this.domainEventService.emit({
+    await this.domainEventService.emit({
       principal, id: crypto.randomUUID(), eventType, entityType: "field_visit",
-      entityId: visit.id, occurredAt,
+      entityId: visit.id, occurredAt, db,
       payload: {
         version: visit.version, appointmentId: visit.appointmentId, workOrderId: visit.workOrderId,
         resourceIds: visit.resourceIds, statusCode: visit.statusCode, arrivedAt: visit.arrivedAt,

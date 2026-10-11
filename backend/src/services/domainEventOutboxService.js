@@ -1,134 +1,56 @@
-const crypto = require("node:crypto");
-const { DomainEventOutboxEntry } = require("../models/domainEventOutboxEntry");
-const { AuditEvent } = require("../models/auditEvent");
+const crypto=require("node:crypto");
+const {DomainEventOutboxEntry}=require("../models/domainEventOutboxEntry");
+const {AuditEvent}=require("../models/auditEvent");
 
-const ACTIONS = Object.freeze({
-  ENQUEUE: "event:emit",
-  DISPATCH: "event:dispatch"
-});
+const ACTIONS=Object.freeze({ENQUEUE:"event:emit",DISPATCH:"event:dispatch"});
 
 class DomainEventOutboxService {
-  constructor({
-    outboxStore = [],
-    auditStore = [],
-    authorize = DomainEventOutboxService.defaultAuthorize
-  } = {}) {
-    this.outboxStore = outboxStore;
-    this.auditStore = auditStore;
-    this.authorize = authorize;
+  constructor({outboxStore=[],auditStore=[],outboxRepository=null,transaction=null,authorize=DomainEventOutboxService.defaultAuthorize}={}) {
+    if(outboxRepository&&!transaction)throw new Error("transaction is required with durable outbox persistence");
+    this.outboxStore=outboxStore;this.auditStore=auditStore;this.outboxRepository=outboxRepository;this.transaction=transaction;this.authorize=authorize;
   }
 
-  enqueue({ principal, event, id = crypto.randomUUID(), availableAt = new Date() } = {}) {
+  enqueue({principal,event,id=crypto.randomUUID(),availableAt=new Date(),db=null}={}) {
+    return this.outboxRepository?this.#durableEnqueue({principal,event,id,availableAt,db}):this.#memoryEnqueue({principal,event,id,availableAt});
+  }
+  claimBatch({principal,limit=10,now=new Date()}={}) { return this.outboxRepository?this.transaction(principal,"event.dispatch.claim",db=>this.#durableClaim({principal,limit,now,db})):this.#memoryClaim({principal,limit,now}); }
+  markPublished({principal,outboxId,publishedAt=new Date()}={}) { return this.outboxRepository?this.transaction(principal,"event.dispatch.publish",db=>this.outboxRepository.markPublished({principal,outboxId,publishedAt,db})):this.#memoryMarkPublished({principal,outboxId,publishedAt}); }
+  markFailed({principal,outboxId,error,availableAt=new Date()}={}) { return this.outboxRepository?this.transaction(principal,"event.dispatch.fail",db=>this.outboxRepository.markFailed({principal,outboxId,error,availableAt,db})):this.#memoryMarkFailed({principal,outboxId,error,availableAt}); }
+  listPending({principal}={}) { return this.outboxRepository?this.transaction(principal,"event.dispatch.list",db=>this.outboxRepository.listPending({principal,db})):this.#memoryListPending({principal}); }
+
+  async #durableEnqueue({principal,event,id,availableAt,db}) {
     this.#requirePrincipal(principal);
-    if (!event?.id || !event.organizationId) throw new Error("Domain event is required");
-    if (event.organizationId !== principal.organizationId) throw new Error("Not authorized");
-    this.#authorize(principal, ACTIONS.ENQUEUE, principal.organizationId);
+    if(!event?.id||event.organizationId!==principal.organizationId)throw new Error("Not authorized");
+    this.#authorize(principal,ACTIONS.ENQUEUE,principal.organizationId);
+    if(db)return this.outboxRepository.enqueue({principal,event,id,availableAt,db});
+    return this.transaction(principal,"event.emit.outbox",client=>this.outboxRepository.enqueue({principal,event,id,availableAt,db:client}));
+  }
+  async #durableClaim({principal,limit,now,db}) { this.#requirePrincipal(principal);this.#authorize(principal,ACTIONS.DISPATCH,principal.organizationId);return this.outboxRepository.claimBatch({principal,limit,now,db}); }
 
-    if (this.outboxStore.some(entry => entry.eventId === event.id || entry.id === id)) {
-      throw new Error("Domain event or outbox entry is already queued");
-    }
-
-    const entry = new DomainEventOutboxEntry({
-      id,
-      organizationId: principal.organizationId,
-      eventId: event.id,
-      eventType: event.eventType,
-      entityType: event.entityType,
-      entityId: event.entityId,
-      payload: event.payload,
-      source: event.source,
-      occurredAt: event.occurredAt,
-      availableAt
-    });
-
-    this.outboxStore.push(entry);
+  #memoryEnqueue({principal,event,id,availableAt}) {
+    this.#requirePrincipal(principal);if(!event?.id||event.organizationId!==principal.organizationId)throw new Error("Not authorized");
+    this.#authorize(principal,ACTIONS.ENQUEUE,principal.organizationId);
+    if(this.outboxStore.some(e=>e.eventId===event.id||e.id===id))throw new Error("Domain event or outbox entry is already queued");
+    const entry=new DomainEventOutboxEntry({id,organizationId:principal.organizationId,eventId:event.id,eventType:event.eventType,entityType:event.entityType,entityId:event.entityId,
+      payload:event.payload,source:event.source,occurredAt:event.occurredAt,availableAt});this.outboxStore.push(entry);
     this.auditStore.push(new AuditEvent({
-      id: "domain-event-outbox-enqueued:" + entry.id,
-      organizationId: entry.organizationId,
-      userId: principal.userId,
-      action: "domain-event.outbox.enqueued",
-      entityType: entry.entityType,
-      entityId: entry.entityId,
-      newValue: { outboxId: entry.id, eventId: entry.eventId, eventType: entry.eventType }
+      id:"domain-event-outbox-enqueued:"+entry.id,organizationId:entry.organizationId,userId:principal.userId,
+      action:"domain-event.outbox.enqueued",entityType:entry.entityType,entityId:entry.entityId,
+      newValue:{outboxId:entry.id,eventId:entry.eventId,eventType:entry.eventType}
     }));
-
     return entry;
   }
-
-  claimBatch({ principal, limit = 10, now = new Date() } = {}) {
-    this.#requirePrincipal(principal);
-    this.#authorize(principal, ACTIONS.DISPATCH, principal.organizationId);
-    if (!Number.isInteger(limit) || limit < 1) throw new Error("limit must be a positive integer");
-
-    const claimed = this.outboxStore
-      .filter(entry => entry.organizationId === principal.organizationId)
-      .filter(entry => (entry.status === "pending" || entry.status === "failed"))
-      .filter(entry => new Date(entry.availableAt) <= now)
-      .sort((a, b) => new Date(a.availableAt) - new Date(b.availableAt))
-      .slice(0, limit);
-
-    for (const entry of claimed) {
-      entry.status = "processing";
-      entry.attempts += 1;
-      entry.lockedAt = now;
-    }
-
-    return claimed;
+  #memoryClaim({principal,limit,now}) {
+    this.#requirePrincipal(principal);this.#authorize(principal,ACTIONS.DISPATCH,principal.organizationId);if(!Number.isInteger(limit)||limit<1)throw new Error("limit must be a positive integer");
+    const claimed=this.outboxStore.filter(e=>e.organizationId===principal.organizationId).filter(e=>(e.status==="pending"||e.status==="failed")).filter(e=>new Date(e.availableAt)<=now).sort((a,b)=>new Date(a.availableAt)-new Date(b.availableAt)).slice(0,limit);
+    for(const e of claimed){e.status="processing";e.attempts+=1;e.lockedAt=now;}return claimed;
   }
-
-  markPublished({ principal, outboxId, publishedAt = new Date() } = {}) {
-    this.#requirePrincipal(principal);
-    const entry = this.#findForOrganization(principal, outboxId);
-    this.#authorize(principal, ACTIONS.DISPATCH, entry.organizationId);
-    if (entry.status !== "processing") throw new Error("Outbox entry is not processing");
-
-    entry.status = "published";
-    entry.publishedAt = publishedAt;
-    entry.lockedAt = null;
-    entry.lastError = null;
-    return entry;
-  }
-
-  markFailed({ principal, outboxId, error, availableAt = new Date() } = {}) {
-    this.#requirePrincipal(principal);
-    const entry = this.#findForOrganization(principal, outboxId);
-    this.#authorize(principal, ACTIONS.DISPATCH, entry.organizationId);
-    if (entry.status !== "processing") throw new Error("Outbox entry is not processing");
-
-    entry.status = "failed";
-    entry.lockedAt = null;
-    entry.lastError = String(error || "Unknown dispatch failure");
-    entry.availableAt = availableAt;
-    return entry;
-  }
-
-  listPending({ principal } = {}) {
-    this.#requirePrincipal(principal);
-    this.#authorize(principal, ACTIONS.DISPATCH, principal.organizationId);
-    return this.outboxStore.filter(entry => entry.organizationId === principal.organizationId && entry.status !== "published");
-  }
-
-  #findForOrganization(principal, outboxId) {
-    const entry = this.outboxStore.find(candidate =>
-      candidate.id === outboxId && candidate.organizationId === principal.organizationId
-    );
-    if (!entry) throw new Error("Outbox entry not found");
-    return entry;
-  }
-
-  #authorize(principal, action, organizationId) {
-    if (!this.authorize(principal, action, { organizationId })) throw new Error("Not authorized");
-  }
-
-  #requirePrincipal(principal) {
-    if (!principal?.userId || !principal?.organizationId) throw new Error("Trusted principal is required");
-  }
-
-  static defaultAuthorize(principal, action, { organizationId }) {
-    return principal.organizationId === organizationId
-      && Array.isArray(principal.permissions)
-      && principal.permissions.includes(action);
-  }
+  #memoryMarkPublished({principal,outboxId,publishedAt}){this.#requirePrincipal(principal);const e=this.#findMemory(principal,outboxId);this.#authorize(principal,ACTIONS.DISPATCH,e.organizationId);if(e.status!=="processing")throw new Error("Outbox entry is not processing");e.status="published";e.publishedAt=publishedAt;e.lockedAt=null;e.lastError=null;return e;}
+  #memoryMarkFailed({principal,outboxId,error,availableAt}){this.#requirePrincipal(principal);const e=this.#findMemory(principal,outboxId);this.#authorize(principal,ACTIONS.DISPATCH,e.organizationId);if(e.status!=="processing")throw new Error("Outbox entry is not processing");e.status="failed";e.lockedAt=null;e.lastError=String(error||"Unknown dispatch failure");e.availableAt=availableAt;return e;}
+  #memoryListPending({principal}){this.#requirePrincipal(principal);this.#authorize(principal,ACTIONS.DISPATCH,principal.organizationId);return this.outboxStore.filter(e=>e.organizationId===principal.organizationId&&e.status!=="published");}
+  #findMemory(principal,id){const e=this.outboxStore.find(x=>x.id===id&&x.organizationId===principal.organizationId);if(!e)throw new Error("Outbox entry not found");return e;}
+  #authorize(principal,action,organizationId){if(!this.authorize(principal,action,{organizationId}))throw new Error("Not authorized");}
+  #requirePrincipal(principal){if(!principal?.userId||!principal?.organizationId)throw new Error("Trusted principal is required");}
+  static defaultAuthorize(principal,action,{organizationId}){return principal.organizationId===organizationId&&Array.isArray(principal.permissions)&&principal.permissions.includes(action);}
 }
-
-module.exports = { DomainEventOutboxService, ACTIONS };
+module.exports={DomainEventOutboxService,ACTIONS};

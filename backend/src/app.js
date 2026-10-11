@@ -260,6 +260,18 @@ async function ensureDurableDemoData(state) {
       ["demo-org", "Demo Organization"]
     );
   });
+  const demoResources = await state.resourceService.list({ principal: demoPrincipal });
+  if (!demoResources.some(resource => resource.id === "auditor-1")) {
+    await state.resourceService.create({
+      principal: {
+        ...demoPrincipal,
+        permissions: [...demoPrincipal.permissions, "resource:create"]
+      },
+      id: "auditor-1",
+      name: "Demo Auditor",
+      role: "auditor"
+    });
+  }
   const existing = await state.jobService.getForOrganization({
     organizationId: "demo-org",
     jobId: "job-1"

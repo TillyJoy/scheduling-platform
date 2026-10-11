@@ -23,8 +23,9 @@ The current backend implementation provides:
 - tenant isolation
 - audit records for enqueue operations
 - an injectable store so the behavior can be tested independently of database technology
+- a durable PostgreSQL repository path when the database is configured, while preserving the in-memory foundation for no-database/test mode
 
-The current store remains in-memory. This is intentionally a foundation and does **not** yet provide a production transaction or crash-recovery guarantee.
+The in-memory store remains available for no-database/test mode. With PostgreSQL configured, domain events and outbox entries are durably persisted and can be claimed transactionally with `FOR UPDATE SKIP LOCKED`. The application emits the domain event and outbox entry in the same database transaction.
 
 ## Production boundary
 

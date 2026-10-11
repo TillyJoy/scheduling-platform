@@ -154,10 +154,13 @@ test("browser-created appointment remains durable after application restart", as
     const date = new Date();
     date.setUTCDate(date.getUTCDate() + 1);
     const scheduledDate = date.toISOString().slice(0, 10);
-    await page.locator("#schedule-date").fill(scheduledDate);
 
-    const createWorkOrder = page.getByRole("button", { name: "Create work order for this job" });
-    if (await createWorkOrder.isVisible()) {
+    const workOrderSelect = page.locator("#work-order-select");
+    await expect(workOrderSelect).toBeVisible();
+    const workOrderOptions = workOrderSelect.locator("option");
+    if (await workOrderOptions.count() === 0) {
+      const createWorkOrder = page.getByRole("button", { name: "Create work order for this job" });
+      await expect(createWorkOrder).toBeVisible();
       const workOrderResponsePromise = page.waitForResponse(response =>
         response.request().method() === "POST" && new URL(response.url()).pathname === "/api/work-orders"
       );
@@ -166,13 +169,6 @@ test("browser-created appointment remains durable after application restart", as
       expect(workOrderResponse.status()).toBe(201);
       const workOrder = await workOrderResponse.json();
       workOrderId = workOrder.id;
-    }
-
-    const workOrderSelect = page.locator("#work-order-select");
-    await expect(workOrderSelect).toBeVisible();
-    // The create-work-order click handler reloads the scheduler asynchronously
-    // after the POST completes. Wait for that UI refresh before reading the value.
-    if (workOrderId) {
       await expect(workOrderSelect).toHaveValue(workOrderId);
     } else {
       await expect(workOrderSelect).toHaveValue(/.+/);
@@ -181,15 +177,19 @@ test("browser-created appointment remains durable after application restart", as
     expect(selectedWorkOrderId).toBeTruthy();
 
     const scheduleDate = page.locator("#schedule-date");
-    await expect(scheduleDate).toHaveValue(scheduledDate);
-    // Creating a work order can refresh the scheduler using its previous date.
-    // Explicitly dispatch the UI's change event and wait for availability for
-    // the requested date before choosing a slot.
-    await scheduleDate.dispatchEvent("change");
+    const availabilityReload = page.waitForResponse(response => {
+      if (response.request().method() !== "GET") return false;
+      const url = new URL(response.url());
+      return url.pathname === "/api/availability" &&
+        url.searchParams.get("start")?.slice(0, 10) === scheduledDate;
+    });
+    await scheduleDate.fill(scheduledDate);
+    await scheduleDate.press("Tab");
+    expect((await availabilityReload).status()).toBe(200);
+
     const slot = page.locator("#slots .slot").first();
     await expect(slot).toBeVisible();
-    await expect.poll(async () => (await slot.getAttribute("data-start"))?.slice(0, 10))
-      .toBe(scheduledDate);
+    await expect(slot).toHaveAttribute("data-start", new RegExp(`^${scheduledDate}`));
     const slotStart = await slot.getAttribute("data-start");
     const slotEnd = await slot.getAttribute("data-end");
     expect(slotStart.slice(0, 10)).toBe(scheduledDate);

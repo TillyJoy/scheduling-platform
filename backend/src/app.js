@@ -260,6 +260,11 @@ async function ensureDurableDemoData(state) {
       "INSERT INTO organizations (id, name) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING",
       ["demo-org", "Demo Organization"]
     );
+    await db.query(
+      `INSERT INTO clients (id, organization_id, first_name, last_name)
+       VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING`,
+      ["client-1", "demo-org", "Demo", "Client"]
+    );
   });
   const demoResources = await state.resourceService.list({ principal: demoPrincipal });
   if (!demoResources.some(resource => resource.id === "auditor-1")) {

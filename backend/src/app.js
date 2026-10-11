@@ -239,7 +239,8 @@ function createAppState(seed = {}) {
     appointmentStatusResolver,
     appointmentService,
     authenticationService: seed.authenticationService || null,
-    databasePool
+    databasePool,
+    transaction
   };
 }
 

@@ -18,6 +18,10 @@ function formatTime(value) {
   return new Date(value).toLocaleTimeString([], { timeZone:"UTC", hour:"numeric", minute:"2-digit" });
 }
 
+function formatDate(value) {
+  return new Date(value).toISOString().slice(0, 10);
+}
+
 function dateWindow(dateValue) {
   const day = new Date(`${dateValue}T00:00:00Z`);
   return {
@@ -110,7 +114,7 @@ async function load(dateValue = new Date().toISOString().slice(0,10), requestedJ
     ).join("") || "<p>No available times.</p>";
 
     document.getElementById("appointments").innerHTML = appointments.map(appointment =>
-      `<div class="row"><strong>${escapeHtml(formatTime(appointment.startTime))} – ${escapeHtml(formatTime(appointment.endTime))}</strong><span>${escapeHtml(appointment.status)}</span></div>`
+      `<div class="row" data-appointment-id="${escapeHtml(appointment.id)}"><strong>${escapeHtml(formatDate(appointment.startTime))} · ${escapeHtml(formatTime(appointment.startTime))} – ${escapeHtml(formatTime(appointment.endTime))}</strong><span>${escapeHtml(appointment.status)}</span></div>`
     ).join("") || "<p>No appointments yet.</p>";
 
     document.getElementById("job-select").addEventListener("change", event => {

@@ -265,6 +265,12 @@ async function ensureDurableDemoData(state) {
        VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING`,
       ["client-1", "demo-org", "Demo", "Client"]
     );
+    await db.query(
+      `INSERT INTO properties (id, organization_id, address, city, state)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (organization_id, id) DO NOTHING`,
+      ["property-1", "demo-org", "123 Main St", "Demo City", "MA"]
+    );
   });
   const demoResources = await state.resourceService.list({ principal: demoPrincipal });
   if (!demoResources.some(resource => resource.id === "auditor-1")) {

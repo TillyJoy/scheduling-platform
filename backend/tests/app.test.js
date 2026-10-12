@@ -4,6 +4,7 @@ const http = require("http");
 const { createAppState, createHandler } = require("../src/app");
 const { AuthenticationService } = require("../src/services/authenticationService");
 const { WorkOrder } = require("../src/models/workOrder");
+const { Assignment } = require("../src/models/assignment");
 
 const AUTH_SECRET = "test-secret-that-is-at-least-32-bytes-long";
 
@@ -106,6 +107,192 @@ test("resource endpoint requires authentication and resource:read permission", a
   }
 });
 
+test("assignment routes require authentication and assignment permissions", async () => {
+  const authenticationService = new AuthenticationService({ secret: AUTH_SECRET });
+  const state = createAppState({ authenticationService });
+  const server = http.createServer(createHandler(state, { allowDevelopmentBypass: false }));
+  await new Promise(resolve => server.listen(0, resolve));
+  try {
+    const unauthenticated = await request(server, "GET", "/api/assignments");
+    assert.equal(unauthenticated.status, 401);
+
+    const noPermissionToken = authenticationService.issueToken({
+      userId: "unprivileged-user",
+      organizationId: "demo-org",
+      permissions: []
+    });
+    const forbiddenRead = await request(server, "GET", "/api/assignments", null, {
+      Authorization: `Bearer ${noPermissionToken}`
+    });
+    assert.equal(forbiddenRead.status, 403);
+
+    const readOnlyToken = authenticationService.issueToken({
+      userId: "assignment-reader",
+      organizationId: "demo-org",
+      permissions: ["assignment:read"]
+    });
+    const forbiddenCreate = await request(server, "POST", "/api/assignments", {
+      id: "assignment-forbidden",
+      resourceId: "auditor-1",
+      jobId: "job-1",
+      startTime: "2026-10-01T09:00:00Z",
+      endTime: "2026-10-01T10:00:00Z"
+    }, { Authorization: `Bearer ${readOnlyToken}` });
+    assert.equal(forbiddenCreate.status, 403);
+
+    const forbiddenTransition = await request(server, "PATCH", "/api/assignments/assignment-demo/status", {
+      expectedStatusCode: "scheduled",
+      statusCode: "cancelled"
+    }, { Authorization: `Bearer ${readOnlyToken}` });
+    assert.equal(forbiddenTransition.status, 403);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
+test("assignment API derives tenant scope, serializes dates, and prevents overlap", async () => {
+  const authenticationService = new AuthenticationService({ secret: AUTH_SECRET });
+  const state = createAppState({
+    authenticationService,
+    resources: [
+      { id: "auditor-1", organizationId: "demo-org", name: "Demo Auditor" },
+      { id: "resource-other", organizationId: "other-org", name: "Other Resource" }
+    ],
+    jobs: [
+      { id: "job-1", organizationId: "demo-org", title: "Demo Job" },
+      { id: "job-other", organizationId: "other-org", title: "Other Job" }
+    ],
+    workOrders: [
+      { id: "wo-demo", organizationId: "demo-org", jobId: "job-1", number: "WO-1" },
+      { id: "wo-other", organizationId: "other-org", jobId: "job-other", number: "WO-2" }
+    ],
+    assignments: [
+      new Assignment({
+        id: "assignment-demo",
+        organizationId: "demo-org",
+        resourceId: "auditor-1",
+        jobId: "job-1",
+        startTime: "2026-10-01T09:00:00Z",
+        endTime: "2026-10-01T10:00:00Z"
+      }),
+      new Assignment({
+        id: "assignment-other",
+        organizationId: "other-org",
+        resourceId: "auditor-1",
+        jobId: "job-other",
+        startTime: "2026-10-01T09:00:00Z",
+        endTime: "2026-10-01T10:00:00Z"
+      })
+    ]
+  });
+  const server = http.createServer(createHandler(state, { allowDevelopmentBypass: false }));
+  await new Promise(resolve => server.listen(0, resolve));
+  const demoToken = authenticationService.issueToken({
+    userId: "assignment-manager",
+    organizationId: "demo-org",
+    permissions: ["assignment:create", "assignment:read"]
+  });
+  const demoAuth = { Authorization: `Bearer ${demoToken}`, "X-Organization-Id": "other-org" };
+  try {
+    const listed = await request(server, "GET", "/api/assignments", null, demoAuth);
+    assert.equal(listed.status, 200);
+    assert.deepEqual(listed.body.map(assignment => assignment.id), ["assignment-demo"]);
+    assert.equal(listed.body[0].organizationId, "demo-org");
+    assert.equal(listed.body[0].startTime, "2026-10-01T09:00:00.000Z");
+
+    const ownAssignment = await request(server, "GET", "/api/assignments/assignment-demo", null, demoAuth);
+    assert.equal(ownAssignment.status, 200);
+    assert.equal(ownAssignment.body.organizationId, "demo-org");
+
+    const created = await request(server, "POST", "/api/assignments", {
+      id: "assignment-new",
+      organizationId: "demo-org",
+      resourceId: "auditor-1",
+      jobId: "job-1",
+      startTime: "2026-10-01T10:00:00Z",
+      endTime: "2026-10-01T11:00:00Z"
+    }, demoAuth);
+    assert.equal(created.status, 201);
+    assert.equal(created.body.organizationId, "demo-org");
+
+    const createdForWorkOrder = await request(server, "POST", "/api/assignments", {
+      id: "assignment-work-order",
+      resourceId: "auditor-1",
+      workOrderId: "wo-demo",
+      startTime: "2026-10-01T11:00:00Z",
+      endTime: "2026-10-01T12:00:00Z"
+    }, demoAuth);
+    assert.equal(createdForWorkOrder.status, 201);
+    assert.equal(createdForWorkOrder.body.workOrderId, "wo-demo");
+
+    const overlapping = await request(server, "POST", "/api/assignments", {
+      id: "assignment-overlap",
+      resourceId: "auditor-1",
+      jobId: "job-1",
+      startTime: "2026-10-01T09:30:00Z",
+      endTime: "2026-10-01T10:30:00Z"
+    }, demoAuth);
+    assert.equal(overlapping.status, 409);
+
+    const spoofedOrganization = await request(server, "POST", "/api/assignments", {
+      id: "assignment-spoofed",
+      organizationId: "other-org",
+      resourceId: "auditor-1",
+      jobId: "job-1",
+      startTime: "2026-10-01T12:00:00Z",
+      endTime: "2026-10-01T13:00:00Z"
+    }, demoAuth);
+    assert.equal(spoofedOrganization.status, 403);
+
+    const validBeforeRejectedReferences = await request(server, "GET", "/api/assignments", null, demoAuth);
+    const acceptedIds = validBeforeRejectedReferences.body.map(assignment => assignment.id);
+    const rejectedReferences = [
+      {
+        id: "assignment-cross-resource",
+        resourceId: "resource-other",
+        jobId: "job-1"
+      },
+      {
+        id: "assignment-cross-job",
+        resourceId: "auditor-1",
+        jobId: "job-other"
+      },
+      {
+        id: "assignment-cross-work-order",
+        resourceId: "auditor-1",
+        workOrderId: "wo-other"
+      }
+    ];
+    for (const rejected of rejectedReferences) {
+      const response = await request(server, "POST", "/api/assignments", {
+        ...rejected,
+        startTime: "2026-10-01T13:00:00Z",
+        endTime: "2026-10-01T14:00:00Z"
+      }, demoAuth);
+      assert.equal(response.status, 404);
+      const listedAfterRejection = await request(server, "GET", "/api/assignments", null, demoAuth);
+      assert.deepEqual(listedAfterRejection.body.map(assignment => assignment.id), acceptedIds);
+    }
+
+    const otherToken = authenticationService.issueToken({
+      userId: "other-assignment-reader",
+      organizationId: "other-org",
+      permissions: ["assignment:read"]
+    });
+    const otherAuth = { Authorization: `Bearer ${otherToken}` };
+    const hidden = await request(server, "GET", "/api/assignments/assignment-demo", null, otherAuth);
+    assert.equal(hidden.status, 404);
+    const otherAssignments = await request(server, "GET", "/api/assignments", null, otherAuth);
+    assert.equal(otherAssignments.status, 200);
+    assert.deepEqual(otherAssignments.body.map(assignment => assignment.id), ["assignment-other"]);
+
+    const invalidDate = await request(server, "GET", "/api/assignments?startTime=not-a-date", null, demoAuth);
+    assert.equal(invalidDate.status, 400);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
 test("resource endpoint returns only active resources in the authenticated organization", async () => {
   const authenticationService = new AuthenticationService({ secret: AUTH_SECRET });
   const state = createAppState({
@@ -145,7 +332,7 @@ test("resource endpoint returns only active resources in the authenticated organ
   }
 });
 
-test("development demo login can read the default demo resource", async () => {
+test("development demo login can use the authorized staff assignment workflow", async () => {
   const previousNodeEnv = process.env.NODE_ENV;
   process.env.NODE_ENV = "development";
   const authenticationService = new AuthenticationService({ secret: AUTH_SECRET });
@@ -156,11 +343,38 @@ test("development demo login can read the default demo resource", async () => {
     const login = await request(server, "POST", "/api/auth/dev-login", {});
     assert.equal(login.status, 200);
 
+    const context = await request(server, "GET", "/api/auth/me", null, {
+      Authorization: `Bearer ${login.body.token}`
+    });
+    assert.ok(context.body.permissions.includes("assignment:read"));
+    assert.ok(context.body.permissions.includes("assignment:create"));
+
     const resources = await request(server, "GET", "/api/resources", null, {
       Authorization: `Bearer ${login.body.token}`
     });
     assert.equal(resources.status, 200);
     assert.deepEqual(resources.body.map(resource => resource.id), ["auditor-1"]);
+
+    const assignments = await request(server, "GET", "/api/assignments", null, {
+      Authorization: `Bearer ${login.body.token}`
+    });
+    assert.equal(assignments.status, 200);
+    assert.deepEqual(assignments.body, []);
+
+    const created = await request(server, "POST", "/api/assignments", {
+      id: "development-assignment",
+      resourceId: "auditor-1",
+      jobId: "job-1",
+      startTime: "2035-04-05T09:00:00.000Z",
+      endTime: "2035-04-05T10:00:00.000Z"
+    }, { Authorization: `Bearer ${login.body.token}` });
+    assert.equal(created.status, 201);
+    assert.equal(created.body.organizationId, "demo-org");
+    assert.equal(created.body.id, "development-assignment");
+
+    const workflowAsset = await requestText(server, "GET", "/assignmentWorkflow.js");
+    assert.equal(workflowAsset.status, 200);
+    assert.match(workflowAsset.body, /Create assignment/);
   } finally {
     await new Promise(resolve => server.close(resolve));
     if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
@@ -606,6 +820,54 @@ test("field execution API enforces tenant and permission boundaries", async () =
     });
     assert.equal(otherTenant.status, 200);
     assert.deepEqual(otherTenant.body, []);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
+
+test("status configuration API is authenticated, permission-aware, and tenant-scoped", async () => {
+  const authenticationService = new AuthenticationService({ secret: AUTH_SECRET });
+  const permissions = ["status:create", "status:read", "status:update"];
+  const token = authenticationService.issueToken({ userId: "status-admin", organizationId: "demo-org", permissions });
+  const otherToken = authenticationService.issueToken({ userId: "other-status-admin", organizationId: "other-org", permissions });
+  const state = createAppState({ authenticationService });
+  const server = http.createServer(createHandler(state, { allowDevelopmentBypass: false }));
+  await new Promise(resolve => server.listen(0, resolve));
+  try {
+    const created = await request(server, "POST", "/api/statuses", {
+      id: "assignment-scheduled", entityType: "assignment", code: "scheduled", label: "Scheduled", initial: true
+    }, { Authorization: `Bearer ${token}` });
+    assert.equal(created.status, 201);
+    assert.equal(created.body.organizationId, "demo-org");
+
+    const cancelled = await request(server, "POST", "/api/statuses", {
+      id: "assignment-cancelled", entityType: "assignment", code: "cancelled", label: "Cancelled", category: "cancelled"
+    }, { Authorization: `Bearer ${token}` });
+    assert.equal(cancelled.status, 201);
+
+    const transitions = await request(server, "PUT", "/api/statuses/transitions", {
+      entityType: "assignment", fromCode: "scheduled", toCodes: ["cancelled"]
+    }, { Authorization: `Bearer ${token}` });
+    assert.equal(transitions.status, 200);
+    assert.deepEqual(transitions.body.toCodes, ["cancelled"]);
+
+    const listed = await request(server, "GET", "/api/statuses?entityType=assignment", null, {
+      Authorization: `Bearer ${token}`
+    });
+    assert.equal(listed.status, 200);
+    assert.deepEqual(listed.body.map(status => status.code), ["cancelled", "scheduled"]);
+
+    const otherTenant = await request(server, "GET", "/api/statuses?entityType=assignment", null, {
+      Authorization: `Bearer ${otherToken}`
+    });
+    assert.equal(otherTenant.status, 200);
+    assert.deepEqual(otherTenant.body, []);
+
+    const forbidden = await request(server, "POST", "/api/statuses", {
+      id: "no-permission", entityType: "assignment", code: "blocked", label: "Blocked"
+    }, { Authorization: `Bearer ${authenticationService.issueToken({ userId: "reader", organizationId: "demo-org", permissions: ["status:read"] })}` });
+    assert.equal(forbidden.status, 403);
   } finally {
     await new Promise(resolve => server.close(resolve));
   }

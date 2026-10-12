@@ -11,13 +11,15 @@ test("durable Assignment persistence is tenant-safe, auditable, transactional, a
   const { ResourceRepository } = require("../src/repositories/resourceRepository");
   const { JobRepository } = require("../src/repositories/jobRepository");
   const { WorkOrderRepository } = require("../src/repositories/workOrderRepository");
+  const { StatusConfigurationRepository } = require("../src/repositories/statusConfigurationRepository");
+  const { StatusConfigurationService } = require("../src/services/statusConfigurationService");
 
   const pool = createDatabasePool();
   const suffix = randomUUID();
   const orgA = `assignment-a-${suffix}`;
   const orgB = `assignment-b-${suffix}`;
   const roleName = `assignment_app_test_${suffix.replace(/[^a-zA-Z0-9_]/g, "_")}`;
-  const permissions = ["assignment:create", "assignment:read"];
+  const permissions = ["assignment:create", "assignment:read", "status:create"];
 
   for (let attempt = 0; attempt < 120; attempt += 1) {
     const result = await pool.query(
@@ -47,6 +49,11 @@ test("durable Assignment persistence is tenant-safe, auditable, transactional, a
   const jobRepository = new JobRepository({ pool });
   const workOrderRepository = new WorkOrderRepository({ pool });
   const assignmentRepository = new AssignmentRepository({ pool });
+  const statusConfigurationRepository = new StatusConfigurationRepository({ pool });
+  const statusConfigurationService = new StatusConfigurationService({
+    repository: statusConfigurationRepository,
+    transaction
+  });
   const statusResolver = ({ statusCode }) =>
     ({ active: { category: "active" }, cancelled: { category: "cancelled" } }[statusCode] || null);
   const assignmentService = new AssignmentService({
@@ -55,7 +62,8 @@ test("durable Assignment persistence is tenant-safe, auditable, transactional, a
     jobRepository,
     workOrderRepository,
     transaction,
-    statusResolver
+    statusResolver,
+    statusConfigurationService
   });
 
   const cleanup = async () => {
@@ -104,10 +112,31 @@ test("durable Assignment persistence is tenant-safe, auditable, transactional, a
   await pool.query(`CREATE ROLE "${roleName}" NOLOGIN NOSUPERUSER NOBYPASSRLS`);
   await pool.query("GRANT USAGE ON SCHEMA public TO \"" + roleName + "\"");
   await pool.query(
-    "GRANT SELECT, INSERT, UPDATE, DELETE ON organizations, resources, jobs, work_orders, assignments TO \"" +
+    "GRANT SELECT, INSERT, UPDATE, DELETE ON organizations, resources, jobs, work_orders, assignments, status_definitions, status_transitions TO \"" +
       roleName + "\""
   );
   await pool.query("GRANT SELECT, INSERT, UPDATE, DELETE ON audit_events TO \"" + roleName + "\"");
+
+  for (const [principal, organizationId] of [[principalA, orgA], [principalB, orgB]]) {
+    await statusConfigurationService.createStatus({
+      principal,
+      id: `active-${suffix}-${organizationId}`,
+      organizationId,
+      entityType: "assignment",
+      code: "active",
+      label: "Active",
+      category: "active"
+    });
+    await statusConfigurationService.createStatus({
+      principal,
+      id: `cancelled-${suffix}-${organizationId}`,
+      organizationId,
+      entityType: "assignment",
+      code: "cancelled",
+      label: "Cancelled",
+      category: "cancelled"
+    });
+  }
 
   const assignment = await assignmentService.create({
     principal: principalA,

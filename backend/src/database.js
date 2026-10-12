@@ -47,35 +47,42 @@ async function withTransaction(pool, { organizationId, userId = null, action = "
 }
 
 async function runMigrations(pool, migrationsDir = path.join(__dirname, "../migrations")) {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS schema_migrations (
-      version TEXT PRIMARY KEY,
-      applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
-    )
-  `);
+  const client = await pool.connect();
+  const migrationLockId = 721031001234;
+  try {
+    // Migration runners can start concurrently from multiple integration tests or app workers.
+    // Hold a session-level lock across the check/apply sequence to prevent duplicate DDL.
+    await client.query("SELECT pg_advisory_lock($1::bigint)", [migrationLockId]);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS schema_migrations (
+        version TEXT PRIMARY KEY,
+        applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )
+    `);
 
-  const files = fs.readdirSync(migrationsDir)
-    .filter(file => /^\d+_.*\.sql$/.test(file))
-    .sort();
+    const files = fs.readdirSync(migrationsDir)
+      .filter(file => /^\d+_.*\.sql$/.test(file))
+      .sort();
 
-  for (const file of files) {
-    const version = file.split("_", 1)[0];
-    const existing = await pool.query("SELECT 1 FROM schema_migrations WHERE version = $1", [version]);
-    if (existing.rowCount) continue;
+    for (const file of files) {
+      const version = file.split("_", 1)[0];
+      const existing = await client.query("SELECT 1 FROM schema_migrations WHERE version = $1", [version]);
+      if (existing.rowCount) continue;
 
-    const sql = fs.readFileSync(path.join(migrationsDir, file), "utf8");
-    const client = await pool.connect();
-    try {
-      await client.query("BEGIN");
-      await client.query(sql);
-      await client.query("INSERT INTO schema_migrations(version) VALUES ($1)", [version]);
-      await client.query("COMMIT");
-    } catch (error) {
-      try { await client.query("ROLLBACK"); } catch {}
-      throw new Error(`Migration ${file} failed: ${error.message}`, { cause: error });
-    } finally {
-      client.release();
+      const sql = fs.readFileSync(path.join(migrationsDir, file), "utf8");
+      try {
+        await client.query("BEGIN");
+        await client.query(sql);
+        await client.query("INSERT INTO schema_migrations(version) VALUES ($1)", [version]);
+        await client.query("COMMIT");
+      } catch (error) {
+        try { await client.query("ROLLBACK"); } catch {}
+        throw new Error(`Migration ${file} failed: ${error.message}`, { cause: error });
+      }
     }
+  } finally {
+    try { await client.query("SELECT pg_advisory_unlock($1::bigint)", [migrationLockId]); } catch {}
+    client.release();
   }
 }
 

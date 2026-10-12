@@ -8,14 +8,18 @@ const ACTIONS = Object.freeze({
 });
 
 class StatusConfigurationService {
-  constructor({ statusStore = new Map(), transitionStore = new Map(), auditStore = [], authorize = StatusConfigurationService.defaultAuthorize } = {}) {
+  constructor({ statusStore = new Map(), transitionStore = new Map(), auditStore = [], repository = null, transaction = null, authorize = StatusConfigurationService.defaultAuthorize } = {}) {
+    if (repository && !transaction) throw new Error("status configuration repository requires transaction");
     this.statusStore = statusStore;
     this.transitionStore = transitionStore;
     this.auditStore = auditStore;
+    this.repository = repository;
+    this.transaction = transaction;
     this.authorize = authorize;
   }
 
   createStatus({ principal, ...input }) {
+    if (this.repository) return this.#durableCreateStatus({ principal, ...input });
     this.#requirePrincipal(principal);
     const status = new StatusDefinition(input);
     this.#authorize(principal, ACTIONS.CREATE, status.organizationId);
@@ -30,6 +34,7 @@ class StatusConfigurationService {
   }
 
   listStatuses({ principal, entityType = null }) {
+    if (this.repository) return this.#durableListStatuses({ principal, entityType });
     this.#requirePrincipal(principal);
     this.#authorize(principal, ACTIONS.READ, principal.organizationId);
     return [...this.statusStore.values()]
@@ -39,6 +44,7 @@ class StatusConfigurationService {
   }
 
   setTransitions({ principal, entityType, fromCode, toCodes }) {
+    if (this.repository) return this.#durableSetTransitions({ principal, entityType, fromCode, toCodes });
     this.#requirePrincipal(principal);
     if (!entityType || !fromCode || !Array.isArray(toCodes)) {
       throw new Error("entityType, fromCode, and toCodes are required");
@@ -56,11 +62,79 @@ class StatusConfigurationService {
   }
 
   getAllowedTransitions({ principal, entityType, fromCode }) {
+    if (this.repository) return this.#durableGetAllowedTransitions({ principal, entityType, fromCode });
     this.#requirePrincipal(principal);
     this.#authorize(principal, ACTIONS.READ, principal.organizationId);
     this.#find(principal.organizationId, entityType, fromCode);
     const toCodes = this.transitionStore.get(this.#key(principal.organizationId, entityType, fromCode)) || [];
     return toCodes.map(code => this.#find(principal.organizationId, entityType, code));
+  }
+
+  async #durableCreateStatus({ principal, ...input }) {
+    this.#requirePrincipal(principal);
+    const status = new StatusDefinition(input);
+    this.#authorize(principal, ACTIONS.CREATE, status.organizationId);
+    return this.transaction(principal, "status.create", async db => {
+      const statuses = await this.repository.listStatuses({ principal, entityType: status.entityType, db });
+      if (statuses.some(existing => existing.code === status.code)) throw new Error("Status code already exists");
+      if (status.initial && statuses.some(existing => existing.initial)) {
+        throw new Error("An initial status already exists for this entity type");
+      }
+      try {
+        return await this.repository.createStatus({ principal, status, db });
+      } catch (error) {
+        if (error.code === "23505" && error.constraint === "status_definitions_one_initial_per_entity_idx") {
+          throw new Error("An initial status already exists for this entity type", { cause: error });
+        }
+        if (error.code === "23505") throw new Error("Status code already exists", { cause: error });
+        throw error;
+      }
+    });
+  }
+
+  async #durableListStatuses({ principal, entityType }) {
+    this.#requirePrincipal(principal);
+    this.#authorize(principal, ACTIONS.READ, principal.organizationId);
+    return this.transaction(principal, "status.list", db =>
+      this.repository.listStatuses({ principal, entityType, db })
+    );
+  }
+
+  async #durableSetTransitions({ principal, entityType, fromCode, toCodes }) {
+    this.#requirePrincipal(principal);
+    if (!entityType || !fromCode || !Array.isArray(toCodes)) {
+      throw new Error("entityType, fromCode, and toCodes are required");
+    }
+    this.#authorize(principal, ACTIONS.UPDATE, principal.organizationId);
+    const uniqueToCodes = [...new Set(toCodes)];
+    return this.transaction(principal, "status.transitions.update", async db => {
+      const from = await this.repository.getStatus({ principal, entityType, code: fromCode, db, forUpdate: true });
+      if (!from) throw new Error("Status not found");
+      for (const toCode of uniqueToCodes) {
+        if (!(await this.repository.getStatus({ principal, entityType, code: toCode, db }))) {
+          throw new Error("Status not found");
+        }
+      }
+      if (from.terminal && uniqueToCodes.length) throw new Error("Terminal status cannot have outgoing transitions");
+      return this.repository.setTransitions({ principal, entityType, fromCode, toCodes: uniqueToCodes, db });
+    });
+  }
+
+  async #durableGetAllowedTransitions({ principal, entityType, fromCode }) {
+    this.#requirePrincipal(principal);
+    this.#authorize(principal, ACTIONS.READ, principal.organizationId);
+    return this.transaction(principal, "status.transitions.read", async db => {
+      if (!(await this.repository.getStatus({ principal, entityType, code: fromCode, db }))) throw new Error("Status not found");
+      return this.repository.getAllowedTransitions({ principal, entityType, fromCode, db });
+    });
+  }
+
+  async getAllowedTransitionsForLifecycle({ principal, entityType, fromCode, db }) {
+    this.#requirePrincipal(principal);
+    this.#authorize(principal, "status:transition", principal.organizationId);
+    if (!this.repository || !db) throw new Error("Durable status configuration and transaction are required");
+    if (!(await this.repository.getStatus({ principal, entityType, code: fromCode, db, forUpdate: true }))) throw new Error("Status not found");
+    return this.repository.getAllowedTransitions({ principal, entityType, fromCode, db });
   }
 
   #find(organizationId, entityType, code) {

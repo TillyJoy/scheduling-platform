@@ -114,6 +114,18 @@ test("durable assignment status lifecycle enforces configured transitions and at
   });
   assert.equal(assignment.statusCode, "scheduled");
 
+  // The staff-facing workflow does not send statusCode. Durable creation should
+  // apply the configured initial assignment status for the organization.
+  const staffCreated = await assignmentService.create({
+    principal: principalA,
+    id: `staff-assignment-${suffix}`,
+    resourceId: `resource-${suffix}`,
+    jobId: `job-a-${suffix}`,
+    startTime: "2026-10-01T11:00:00Z",
+    endTime: "2026-10-01T12:00:00Z"
+  });
+  assert.equal(staffCreated.statusCode, "scheduled");
+
   await pool.query(`REVOKE INSERT ON event_outbox FROM "${roleName}"`);
   await assert.rejects(
     () => assignmentService.transitionStatus({

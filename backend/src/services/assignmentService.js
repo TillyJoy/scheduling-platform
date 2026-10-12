@@ -158,7 +158,18 @@ class AssignmentService {
     this.#requirePrincipal(principal);
     this.#authorize(principal, "assignment:create", principal.organizationId);
     return this.transaction(principal, "assignment.create", async db => {
-      const assignment = new Assignment({ ...input, organizationId: principal.organizationId });
+      let statusCode = input.statusCode;
+      if (!statusCode && this.statusConfigurationService?.repository) {
+        const configuredStatuses = await this.statusConfigurationService.repository.listStatuses({
+          principal, entityType: "assignment", db
+        });
+        statusCode = configuredStatuses.find(status => status.initial)?.code ?? null;
+      }
+      const assignment = new Assignment({
+        ...input,
+        organizationId: principal.organizationId,
+        statusCode
+      });
       await lockResources(db, principal.organizationId, [assignment.resourceId]);
 
       if (await this.assignmentRepository.get({ principal, assignmentId: assignment.id, db })) {

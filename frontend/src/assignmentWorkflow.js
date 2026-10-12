@@ -160,7 +160,7 @@
               <dt>Schedule</dt><dd>${escapeHtml(dateTime(selectedAssignment.startTime))} – ${escapeHtml(dateTime(selectedAssignment.endTime))}</dd>
               <dt>Current status</dt><dd>${escapeHtml(selectedAssignment.statusCode || "Status not set")}</dd>
             </dl>
-            <p class="muted">Status is read-only. The current API does not support assignment updates or lifecycle transitions.</p>
+            <p class="muted">Status is read-only in this workspace. Lifecycle transitions are handled by the assignment status API.</p>
           </section>` : detailError ? `<p class="error" role="alert">${escapeHtml(detailError)}</p>` : ""}
         <section class="assignment-create-panel" aria-labelledby="assignment-create-heading">
           <h3 id="assignment-create-heading">Create assignment</h3>

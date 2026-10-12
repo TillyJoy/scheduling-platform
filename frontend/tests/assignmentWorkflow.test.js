@@ -134,6 +134,7 @@ test("assignment workspace exposes detail, read-only status, and escaped user da
   assert.match(markup, /Current assignments/);
   assert.match(markup, /Assignment details/);
   assert.match(markup, /Status is read-only/);
+  assert.match(markup, /Lifecycle transitions are handled by the assignment status API/);
   assert.match(markup, /&lt;active&gt;/);
   assert.doesNotMatch(markup, /<active>/);
 });

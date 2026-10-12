@@ -23,6 +23,7 @@ const { AvailabilityRepository } = require("./repositories/availabilityRepositor
 const { AppointmentRepository } = require("./repositories/appointmentRepository");
 const { SchedulingHoldRepository } = require("./repositories/schedulingHoldRepository");
 const { AssignmentRepository } = require("./repositories/assignmentRepository");
+const { StatusConfigurationRepository } = require("./repositories/statusConfigurationRepository");
 const { ResourceService } = require("./services/resourceService");
 const { QualificationService } = require("./services/qualificationService");
 const { ResourceQualificationService } = require("./services/resourceQualificationService");
@@ -80,13 +81,16 @@ function createAppState(seed = {}) {
   const workOrderStore = new Map(workOrders.map(order => [JSON.stringify([order.organizationId, order.id]), order]));
   const domainEventService = new DomainEventService({ eventStore: domainEvents, auditStore: auditEvents });
   const databasePool = seed.databasePool || null;
-  const statusConfigurationService = seed.statusConfigurationService || new StatusConfigurationService({
-    statusStore: seed.statusStore || new Map(),
-    auditStore: auditEvents
-  });
   const transaction = databasePool
     ? (principal, action, work) => withTransaction(databasePool, { organizationId: principal.organizationId, userId: principal.userId, action }, work)
     : null;
+  const statusConfigurationRepository = databasePool ? new StatusConfigurationRepository({ pool: databasePool }) : null;
+  const statusConfigurationService = seed.statusConfigurationService || new StatusConfigurationService({
+    statusStore: seed.statusStore || new Map(),
+    auditStore: auditEvents,
+    repository: statusConfigurationRepository,
+    transaction
+  });
   const jobRepository = databasePool ? new JobRepository({ pool: databasePool }) : null;
   const workOrderRepository = databasePool ? new WorkOrderRepository({ pool: databasePool }) : null;
   const resourceRepository = databasePool ? new ResourceRepository({ pool: databasePool }) : null;
@@ -141,7 +145,8 @@ function createAppState(seed = {}) {
     jobService,
     workOrderService,
     transaction,
-    statusResolver: assignmentStatusResolver
+    statusResolver: assignmentStatusResolver,
+    statusConfigurationService
   });
   const fieldVisitRepository = databasePool ? new FieldVisitRepository({ pool: databasePool }) : null;
   const actualWorkRepository = databasePool ? new ActualWorkRepository({ pool: databasePool }) : null;
@@ -240,6 +245,7 @@ function createAppState(seed = {}) {
     demoAvailability,
     schedulingService,
     statusConfigurationService,
+    statusConfigurationRepository,
     appointmentStatusResolver,
     appointmentService,
     authenticationService: seed.authenticationService || null,
@@ -252,7 +258,7 @@ function principal() {
   return {
     userId: "demo-user",
     organizationId: "demo-org",
-    permissions: ["job:create", "job:read", "workOrder:create", "workOrder:read", "resource:read", "assignment:create", "assignment:read", "appointment:create", "appointment:read", "appointment:update", "appointment:confirm", "appointment:cancel", "fieldVisit:create", "fieldVisit:read", "fieldVisit:update", "actualWork:create", "actualWork:read", "fieldExecution:sync"]
+    permissions: ["job:create", "job:read", "workOrder:create", "workOrder:read", "resource:read", "assignment:create", "assignment:read", "assignment:update", "status:create", "status:read", "status:update", "status:transition", "appointment:create", "appointment:read", "appointment:update", "appointment:confirm", "appointment:cancel", "fieldVisit:create", "fieldVisit:read", "fieldVisit:update", "actualWork:create", "actualWork:read", "fieldExecution:sync"]
   };
 }
 
@@ -310,19 +316,19 @@ function serializeFieldVisit(visit) {
   };
 }
 
-function serializeActualWork(work) {
-  return {
-    ...work,
-    actualStartTime: work.actualStartTime?.toISOString() ?? null,
-    actualEndTime: work.actualEndTime?.toISOString() ?? null
-  };
-}
-
 function serializeAssignment(assignment) {
   return {
     ...assignment,
     startTime: assignment.startTime.toISOString(),
     endTime: assignment.endTime.toISOString()
+  };
+}
+
+function serializeActualWork(work) {
+  return {
+    ...work,
+    actualStartTime: work.actualStartTime?.toISOString() ?? null,
+    actualEndTime: work.actualEndTime?.toISOString() ?? null
   };
 }
 
@@ -450,6 +456,46 @@ function createHandler(state, {
         });
       }
 
+      if (req.method === "GET" && path === "/api/statuses") {
+        const statuses = await state.statusConfigurationService.listStatuses({
+          principal: p,
+          entityType: url.searchParams.get("entityType")
+        });
+        return json(res, 200, statuses);
+      }
+      if (req.method === "POST" && path === "/api/statuses") {
+        const input = await readBody(req);
+        if (!input || typeof input !== "object" || Array.isArray(input)) {
+          return json(res, 400, { error: "Request body must be a JSON object" });
+        }
+        if (input.organizationId && input.organizationId !== p.organizationId) {
+          return json(res, 403, { error: "Not authorized for the requested organization" });
+        }
+        try {
+          const status = await state.statusConfigurationService.createStatus({
+            ...input, principal: p, organizationId: p.organizationId
+          });
+          return json(res, 201, status);
+        } catch (error) {
+          if (error.message === "Status code already exists" || error.message === "An initial status already exists for this entity type") error.statusCode ||= 409;
+          else if (["id is required", "organizationId is required", "entityType is required", "code is required", "label is required", "Invalid status category", "sortOrder must be an integer", "metadata must be an object"].includes(error.message)) error.statusCode ||= 400;
+          throw error;
+        }
+      }
+      if (req.method === "PUT" && path === "/api/statuses/transitions") {
+        const input = await readBody(req);
+        if (!input || typeof input !== "object" || Array.isArray(input)) return json(res, 400, { error: "Request body must be a JSON object" });
+        try {
+          const toCodes = await state.statusConfigurationService.setTransitions({
+            principal: p, entityType: input.entityType, fromCode: input.fromCode, toCodes: input.toCodes
+          });
+          return json(res, 200, { entityType: input.entityType, fromCode: input.fromCode, toCodes });
+        } catch (error) {
+          if (error.message === "Status not found") error.statusCode ||= 404;
+          else if (["entityType, fromCode, and toCodes are required", "Terminal status cannot have outgoing transitions"].includes(error.message)) error.statusCode ||= 400;
+          throw error;
+        }
+      }
       if (req.method === "GET" && path === "/api/jobs") {
         return json(res, 200, await state.jobService.list({ principal: p }));
       }
@@ -528,6 +574,20 @@ function createHandler(state, {
           }
           throw error;
         }
+      }
+      const assignmentStatusAction = path.match(/^\/api\/assignments\/([^/]+)\/status$/);
+      if (req.method === "PATCH" && assignmentStatusAction) {
+        const input = await readBody(req);
+        if (!input || typeof input !== "object" || Array.isArray(input)) return json(res, 400, { error: "Request body must be a JSON object" });
+        const assignment = await state.assignmentService.transitionStatus({
+          principal: p,
+          assignmentId: assignmentStatusAction[1],
+          expectedStatusCode: input.expectedStatusCode,
+          statusCode: input.statusCode,
+          reason: input.reason ?? null,
+          metadata: input.metadata ?? {}
+        });
+        return json(res, 200, serializeAssignment(assignment));
       }
       if (req.method === "GET" && path === "/api/resources") {
         const resources = await state.resourceService.list({ principal: p });

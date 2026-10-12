@@ -44,8 +44,10 @@ Lifecycle reads and transitions likewise require a trusted principal and the app
 
 Status configuration changes create audit events using the trusted principal identity. Successful domain status transitions also create audit events containing the previous status, new status, actor, and optional reason/metadata.
 
-## Current scope
+## Persistence and current scope
 
-The configuration and lifecycle foundations are implemented independently of database technology. Persistent domain repositories and domain-specific services will adopt the lifecycle service as those integrations are implemented.
+The service retains its in-memory mode for isolated tests and non-durable use. Database-backed application composition uses PostgreSQL persistence for status definitions and allowed transitions. Both tables are organization-scoped, use row-level security, and preserve the domain-neutral `entityType` + stable status `code` model. Configuration writes and their audit records share a transaction.
 
-The platform should continue to keep status rules in configuration rather than embedding organization-specific lifecycle behavior in domain code.
+The durable assignment lifecycle consumes persisted status definitions/transitions. Its status change, immutable audit event, domain event, and outbox entry are committed in the same PostgreSQL transaction. The assignment transition API is `PATCH /api/assignments/{id}/status` and requires both `assignment:update` and `status:transition`; it accepts the expected current status as a compare-and-swap precondition.
+
+This does not claim that every entity lifecycle has been migrated. The generic `StatusLifecycleService` remains an in-memory foundation for other entities until each durable repository adopts an equivalent transactional boundary. Status rules remain configuration, not organization-specific code.

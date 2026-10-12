@@ -13,7 +13,8 @@ class AssignmentService {
     workOrderService = null,
     transaction = null,
     authorize = AssignmentService.defaultAuthorize,
-    statusResolver = null
+    statusResolver = null,
+    statusConfigurationService = null
   } = {}) {
     if (assignmentRepository && (!transaction || !resourceRepository || !jobRepository || !workOrderRepository)) {
       throw new Error("assignmentRepository requires transaction, resourceRepository, jobRepository, and workOrderRepository");
@@ -32,6 +33,7 @@ class AssignmentService {
     this.transaction = transaction;
     this.authorize = authorize;
     this.statusResolver = statusResolver;
+    this.statusConfigurationService = statusConfigurationService;
   }
 
   create(args = {}) {
@@ -44,6 +46,88 @@ class AssignmentService {
 
   list(args = {}) {
     return this.assignmentRepository ? this.#durableList(args) : this.#memoryList(args);
+  }
+
+  transitionStatus(args = {}) {
+    return this.#durableTransitionStatus(args);
+  }
+
+  async #durableTransitionStatus({ principal, assignmentId, expectedStatusCode, statusCode, reason = null, metadata = {} }) {
+    this.#requirePrincipal(principal);
+    this.#authorize(principal, "assignment:update", principal.organizationId);
+    this.#authorize(principal, "status:transition", principal.organizationId);
+    if (!this.assignmentRepository || !this.statusConfigurationService?.repository || !this.transaction) {
+      const error = new Error("Durable assignment status transitions require database persistence");
+      error.statusCode = 503;
+      throw error;
+    }
+    if (!assignmentId || typeof expectedStatusCode !== "string" || !expectedStatusCode || typeof statusCode !== "string" || !statusCode) {
+      const error = new Error("assignmentId, expectedStatusCode, and statusCode are required");
+      error.statusCode = 400;
+      throw error;
+    }
+    if (typeof metadata !== "object" || metadata === null || Array.isArray(metadata)) {
+      const error = new Error("metadata must be an object");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    return this.transaction(principal, "assignment.status.transition", async db => {
+      const initial = await this.assignmentRepository.get({ principal, assignmentId, db });
+      if (!initial) {
+        const error = new Error("Assignment not found");
+        error.statusCode = 404;
+        throw error;
+      }
+      await lockResources(db, principal.organizationId, [initial.resourceId]);
+      const current = await this.assignmentRepository.get({ principal, assignmentId, db, forUpdate: true });
+      if (!current) {
+        const error = new Error("Assignment not found");
+        error.statusCode = 404;
+        throw error;
+      }
+      if (current.statusCode !== expectedStatusCode) {
+        const error = new Error("Assignment status changed; reload and retry");
+        error.statusCode = 409;
+        throw error;
+      }
+      const currentStatus = await this.statusConfigurationService.repository.getStatus({
+        principal, entityType: "assignment", code: current.statusCode, db
+      });
+      if (!currentStatus) {
+        const error = new Error("Current assignment status is not configured");
+        error.statusCode = 409;
+        throw error;
+      }
+      const allowed = await this.statusConfigurationService.getAllowedTransitionsForLifecycle({
+        principal, entityType: "assignment", fromCode: current.statusCode, db
+      });
+      const targetStatus = allowed.find(status => status.code === statusCode);
+      if (!targetStatus) {
+        const error = new Error("Status transition is not allowed");
+        error.statusCode = 409;
+        throw error;
+      }
+      if (targetStatus.category !== "cancelled") {
+        const conflicts = await this.assignmentRepository.findConflicts({
+          principal, resourceId: current.resourceId, startTime: current.startTime,
+          endTime: current.endTime, excludeAssignmentId: current.id, db
+        });
+        for (const conflict of conflicts) {
+          const conflictStatus = conflict.statusCode && await this.statusConfigurationService.repository.getStatus({
+            principal, entityType: "assignment", code: conflict.statusCode, db
+          });
+          if (!conflictStatus || conflictStatus.category !== "cancelled") {
+            const error = new Error("Resource is already assigned to an overlapping assignment");
+            error.statusCode = 409;
+            throw error;
+          }
+        }
+      }
+      return this.assignmentRepository.transitionStatus({
+        principal, assignmentId, expectedStatusCode, statusCode, reason, metadata, db
+      });
+    });
   }
 
   #memoryCreate({ principal, ...input }) {
@@ -102,7 +186,18 @@ class AssignmentService {
     this.#requirePrincipal(principal);
     this.#authorize(principal, "assignment:create", principal.organizationId);
     return this.transaction(principal, "assignment.create", async db => {
-      const assignment = new Assignment({ ...input, organizationId: principal.organizationId });
+      let statusCode = input.statusCode;
+      if (!statusCode && this.statusConfigurationService?.repository) {
+        const configuredStatuses = await this.statusConfigurationService.repository.listStatuses({
+          principal, entityType: "assignment", db
+        });
+        statusCode = configuredStatuses.find(status => status.initial)?.code ?? null;
+      }
+      const assignment = new Assignment({
+        ...input,
+        organizationId: principal.organizationId,
+        statusCode
+      });
       await lockResources(db, principal.organizationId, [assignment.resourceId]);
 
       if (await this.assignmentRepository.get({ principal, assignmentId: assignment.id, db })) {
@@ -137,8 +232,15 @@ class AssignmentService {
         endTime: assignment.endTime,
         db
       });
-      if (conflicts.some(existing => this.#consumesResource(existing))) {
-        throw new Error("Resource is already assigned to an overlapping assignment");
+      for (const existing of conflicts) {
+        let consumesResource = this.#consumesResource(existing);
+        if (this.statusConfigurationService?.repository && existing.statusCode) {
+          const configuredStatus = await this.statusConfigurationService.repository.getStatus({
+            principal, entityType: "assignment", code: existing.statusCode, db
+          });
+          consumesResource = !configuredStatus || configuredStatus.category !== "cancelled";
+        }
+        if (consumesResource) throw new Error("Resource is already assigned to an overlapping assignment");
       }
 
       return this.assignmentRepository.create({

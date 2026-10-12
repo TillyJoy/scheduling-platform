@@ -175,7 +175,8 @@ test("staff can list, inspect, and create an assignment through the authenticate
     expect((await detailResponse.json()).id).toBe(assignment.id);
     const details = page.locator(".assignment-detail-panel");
     await expect(details).toContainText(assignment.id);
-    await expect(details).toContainText("Status is read-only.");
+    await expect(details).toContainText("Status is read-only in this workspace.");
+    await expect(details).toContainText("Lifecycle transitions are handled by the assignment status API.");
     await expect(details).toContainText("Status not set");
     await expect(details.locator("button, input, select")).toHaveCount(0);
 

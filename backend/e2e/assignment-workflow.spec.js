@@ -129,7 +129,7 @@ test("staff can list, inspect, and create an assignment through the authenticate
     const listResponse = await listResponsePromise;
     expect(listResponse.status()).toBe(200);
     expect(await listResponse.json()).toEqual([]);
-    await expect(page.getByRole("heading", { name: "Assignments" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Assignments", exact: true })).toBeVisible();
     await expect(page.getByText("No assignments are available in your organization.", { exact: true })).toBeVisible();
 
     const start = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);

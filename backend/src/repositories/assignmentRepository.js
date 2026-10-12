@@ -26,10 +26,10 @@ class AssignmentRepository {
     return saved;
   }
 
-  async get({ principal, assignmentId, db = this.pool }) {
+  async get({ principal, assignmentId, db = this.pool, forUpdate = false }) {
     this.#requirePrincipal(principal);
     const result = await db.query(
-      "SELECT * FROM assignments WHERE organization_id=$1 AND id=$2",
+      `SELECT * FROM assignments WHERE organization_id=$1 AND id=$2${forUpdate ? " FOR UPDATE" : ""}`,
       [principal.organizationId, assignmentId]
     );
     return result.rows[0] ? this.#map(result.rows[0]) : null;
@@ -60,18 +60,62 @@ class AssignmentRepository {
     return result.rows.map(row => this.#map(row));
   }
 
-  async findConflicts({ principal, resourceId, startTime, endTime, db = this.pool }) {
+  async findConflicts({ principal, resourceId, startTime, endTime, excludeAssignmentId = null, db = this.pool }) {
     this.#requirePrincipal(principal);
+    const values = [principal.organizationId, resourceId, startTime, endTime];
+    let exclude = "";
+    if (excludeAssignmentId) {
+      values.push(excludeAssignmentId);
+      exclude = ` AND id<>$${values.length}`;
+    }
     const result = await db.query(
       `SELECT * FROM assignments
        WHERE organization_id=$1
          AND resource_id=$2
          AND end_time>$3
-         AND start_time<$4
+         AND start_time<$4${exclude}
        ORDER BY start_time, id`,
-      [principal.organizationId, resourceId, startTime, endTime]
+      values
     );
     return result.rows.map(row => this.#map(row));
+  }
+
+  async transitionStatus({ principal, assignmentId, expectedStatusCode, statusCode, reason = null, metadata = {}, db = this.pool }) {
+    this.#requirePrincipal(principal);
+    const now = this.clock();
+    const update = await db.query(
+      `UPDATE assignments SET status_code=$4, updated_at=$5
+       WHERE organization_id=$1 AND id=$2 AND status_code IS NOT DISTINCT FROM $3
+       RETURNING *`,
+      [principal.organizationId, assignmentId, expectedStatusCode, statusCode, now]
+    );
+    if (!update.rows[0]) {
+      const error = new Error("Assignment status changed; reload and retry");
+      error.statusCode = 409;
+      throw error;
+    }
+    const saved = this.#map(update.rows[0]);
+    const previousValue = { statusCode: expectedStatusCode };
+    const newValue = { statusCode, reason, metadata };
+    const eventId = require("node:crypto").randomUUID();
+    const payload = { previousStatus: expectedStatusCode, newStatus: statusCode, reason, metadata };
+    await db.query(
+      `INSERT INTO audit_events
+        (id,organization_id,user_id,action,entity_type,entity_id,previous_value,new_value,source,created_at)
+       VALUES (gen_random_uuid()::text,$1,$2,'assignment.status.transitioned','assignment',$3,$4::jsonb,$5::jsonb,'application',$6)`,
+      [principal.organizationId, principal.userId, assignmentId, JSON.stringify(previousValue), JSON.stringify(newValue), now]
+    );
+    await db.query(
+      `INSERT INTO domain_events (id,organization_id,event_type,entity_type,entity_id,actor_user_id,occurred_at,payload)
+       VALUES ($1,$2,'assignment.status.changed','assignment',$3,$4,$5,$6::jsonb)`,
+      [eventId, principal.organizationId, assignmentId, principal.userId, now, JSON.stringify(payload)]
+    );
+    await db.query(
+      `INSERT INTO event_outbox (organization_id,event_id,event_type,payload,occurred_at,status,available_at)
+       VALUES ($1,$2,'assignment.status.changed',$3::jsonb,$4,'pending',$4)`,
+      [principal.organizationId, eventId, JSON.stringify({ entityType: "assignment", entityId: assignmentId, ...payload }), now]
+    );
+    return saved;
   }
 
   #map(row) {

@@ -2,9 +2,11 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const os = require("node:os");
 const {
   getDatabaseConfig,
-  withTransaction
+  withTransaction,
+  runMigrations
 } = require("../src/database");
 
 test("database configuration fails closed without DATABASE_URL", () => {
@@ -60,6 +62,24 @@ test("transaction helper commits successful work", async () => {
   });
   assert.equal(result, 42);
   assert.equal(calls.at(-2).sql, "COMMIT");
+  assert.deepEqual(calls.at(-1), { release: true });
+});
+
+test("migration runner serializes concurrent startup attempts with a session advisory lock", async t => {
+  const migrationsDir = fs.mkdtempSync(path.join(os.tmpdir(), "scheduling-migrations-"));
+  t.after(() => fs.rmSync(migrationsDir, { recursive: true, force: true }));
+  const calls = [];
+  const client = {
+    async query(sql, params) {
+      calls.push({ sql: sql.trim(), params });
+      return { rowCount: 0, rows: [] };
+    },
+    release() { calls.push({ release: true }); }
+  };
+  await runMigrations({ connect: async () => client }, migrationsDir);
+  assert.equal(calls[0].sql, "SELECT pg_advisory_lock($1::bigint)");
+  assert.deepEqual(calls[0].params, [721031001234]);
+  assert.ok(calls.some(call => call.sql === "SELECT pg_advisory_unlock($1::bigint)"));
   assert.deepEqual(calls.at(-1), { release: true });
 });
 

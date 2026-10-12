@@ -24,14 +24,18 @@ Records are keyed by organization + entity type + entity ID, and the stored orga
 
 Every successful transition creates an `AuditEvent` containing the trusted actor, organization, entity type/ID, previous status, new status, reason, and metadata.
 
-## Current boundary
+## Generic service boundary
 
-The service uses an injected record store so lifecycle behavior can be tested independently of database technology. It does not replace individual domain models or repositories yet.
+The generic `StatusLifecycleService` still uses an injected in-memory record store. It does not replace individual domain models or repositories, and its in-memory event path is not a durable transaction boundary.
+
+## Durable assignment lifecycle
+
+The assignment service has a separate PostgreSQL-backed transition path. It validates the organization-scoped configured transition, locks the resource and assignment, compares the expected current status, and enforces scheduling conflict behavior before changing the status. It records the state update, append-only audit event, domain event, and pending outbox item in one transaction. If any write fails, the complete transition rolls back.
+
+The endpoint is `PATCH /api/assignments/{id}/status`. It requires a trusted principal with `assignment:update` and `status:transition`, and a body containing `expectedStatusCode` and `statusCode`, with optional `reason` and object `metadata`. A stale expected status or a transition that would create a resource conflict returns a conflict rather than silently overwriting state.
+
+Status definitions and allowed transitions are persisted in `status_definitions` and `status_transitions`, with tenant row-level security. This is an incremental domain integration, not a claim that all entity types now have durable lifecycle handling.
 
 ## Domain event integration
 
-When a domain event service is supplied, a successful transition emits a generic status-change event before the record mutation is committed by the injected record store. The default event type is derived from the runtime entity type using the pattern `<entityType>.status.changed`, and callers may supply another configured event type.
-
-The event contains the previous status, new status, reason, and metadata. The lifecycle service does not invoke notification rules directly.
-
-The current in-memory foundation cannot provide transactional guarantees across the record store and event store. Persistent production integration should use a transactionally reliable outbox/event boundary so a committed state change and its event cannot diverge.
+The durable assignment path writes a generic `assignment.status.changed` domain event and an outbox entry inside the same transaction as the status update. It does not invoke notification rules directly; downstream delivery remains the responsibility of the outbox/notification processing layer.

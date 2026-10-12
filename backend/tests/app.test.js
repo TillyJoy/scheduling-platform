@@ -106,6 +106,53 @@ test("resource endpoint requires authentication and resource:read permission", a
   }
 });
 
+test("status configuration API is authenticated, permission-aware, and tenant-scoped", async () => {
+  const authenticationService = new AuthenticationService({ secret: AUTH_SECRET });
+  const permissions = ["status:create", "status:read", "status:update"];
+  const token = authenticationService.issueToken({ userId: "status-admin", organizationId: "demo-org", permissions });
+  const otherToken = authenticationService.issueToken({ userId: "other-status-admin", organizationId: "other-org", permissions });
+  const state = createAppState({ authenticationService });
+  const server = http.createServer(createHandler(state, { allowDevelopmentBypass: false }));
+  await new Promise(resolve => server.listen(0, resolve));
+  try {
+    const created = await request(server, "POST", "/api/statuses", {
+      id: "assignment-scheduled", entityType: "assignment", code: "scheduled", label: "Scheduled", initial: true
+    }, { Authorization: `Bearer ${token}` });
+    assert.equal(created.status, 201);
+    assert.equal(created.body.organizationId, "demo-org");
+
+    const cancelled = await request(server, "POST", "/api/statuses", {
+      id: "assignment-cancelled", entityType: "assignment", code: "cancelled", label: "Cancelled", category: "cancelled"
+    }, { Authorization: `Bearer ${token}` });
+    assert.equal(cancelled.status, 201);
+
+    const transitions = await request(server, "PUT", "/api/statuses/transitions", {
+      entityType: "assignment", fromCode: "scheduled", toCodes: ["cancelled"]
+    }, { Authorization: `Bearer ${token}` });
+    assert.equal(transitions.status, 200);
+    assert.deepEqual(transitions.body.toCodes, ["cancelled"]);
+
+    const listed = await request(server, "GET", "/api/statuses?entityType=assignment", null, {
+      Authorization: `Bearer ${token}`
+    });
+    assert.equal(listed.status, 200);
+    assert.deepEqual(listed.body.map(status => status.code), ["cancelled", "scheduled"]);
+
+    const otherTenant = await request(server, "GET", "/api/statuses?entityType=assignment", null, {
+      Authorization: `Bearer ${otherToken}`
+    });
+    assert.equal(otherTenant.status, 200);
+    assert.deepEqual(otherTenant.body, []);
+
+    const forbidden = await request(server, "POST", "/api/statuses", {
+      id: "no-permission", entityType: "assignment", code: "blocked", label: "Blocked"
+    }, { Authorization: `Bearer ${authenticationService.issueToken({ userId: "reader", organizationId: "demo-org", permissions: ["status:read"] })}` });
+    assert.equal(forbidden.status, 403);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
 test("resource endpoint returns only active resources in the authenticated organization", async () => {
   const authenticationService = new AuthenticationService({ secret: AUTH_SECRET });
   const state = createAppState({

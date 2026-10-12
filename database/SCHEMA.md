@@ -18,6 +18,11 @@ The database must support multiple organizations with isolated data.
 - availability
 - zones
 - appointments
+- assignments
+- status_definitions
+- status_transitions
+- domain_events
+- event_outbox
 - scheduling_holds
 - notifications
 - integrations
@@ -76,7 +81,7 @@ Names, addresses, and other changeable values must not be used as primary identi
 
 ## Auditability
 
-Important changes must create audit events.
+Important changes must create audit events. Durable assignment status transitions also write a domain event and event-outbox entry in the same transaction as the assignment update.
 
 Examples include:
 
@@ -91,7 +96,7 @@ Examples include:
 
 ## Configuration
 
-Organization-specific configuration should be stored separately from core entity records where appropriate.
+Organization-specific configuration should be stored separately from core entity records where appropriate. Status definitions and allowed transitions are persisted by organization and entity type in `status_definitions` and `status_transitions`, with tenant row-level security and audited configuration changes.
 
 This includes:
 

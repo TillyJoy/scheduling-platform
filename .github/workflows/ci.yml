@@ -86,3 +86,18 @@ jobs:
           TOKEN=$(curl --silent --fail -X POST http://127.0.0.1:3000/api/auth/dev-login | node -e 'let s=""; process.stdin.on("data", d => s+=d); process.stdin.on("end", () => process.stdout.write(JSON.parse(s).token))')
           curl --silent --fail -H "Authorization: Bearer $TOKEN" http://127.0.0.1:3000/api/jobs > /tmp/jobs.json
           grep -q 'Demo Client' /tmp/jobs.json
+
+      - name: Install Chromium for browser acceptance
+        working-directory: backend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run staff assignment browser acceptance
+        working-directory: backend
+        env:
+          DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/scheduling_platform_test
+          DATABASE_SSL: "false"
+          RUN_POSTGRES_TESTS: 1
+          NODE_ENV: development
+          ALLOW_DEVELOPMENT_AUTH_BYPASS: "false"
+          AUTH_SECRET: mvp-ci-auth-secret-that-is-at-least-32-bytes-long
+        run: npm run test:browser

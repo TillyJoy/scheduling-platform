@@ -8,6 +8,9 @@ class AssignmentService {
     resourceRepository = null,
     jobRepository = null,
     workOrderRepository = null,
+    resourceService = null,
+    jobService = null,
+    workOrderService = null,
     transaction = null,
     authorize = AssignmentService.defaultAuthorize,
     statusResolver = null
@@ -15,11 +18,17 @@ class AssignmentService {
     if (assignmentRepository && (!transaction || !resourceRepository || !jobRepository || !workOrderRepository)) {
       throw new Error("assignmentRepository requires transaction, resourceRepository, jobRepository, and workOrderRepository");
     }
+    if (!assignmentRepository && (!resourceService || !jobService || !workOrderService)) {
+      throw new Error("resourceService, jobService, and workOrderService are required for in-memory assignments");
+    }
     this.assignmentStore = assignmentStore;
     this.assignmentRepository = assignmentRepository;
     this.resourceRepository = resourceRepository;
     this.jobRepository = jobRepository;
     this.workOrderRepository = workOrderRepository;
+    this.resourceService = resourceService;
+    this.jobService = jobService;
+    this.workOrderService = workOrderService;
     this.transaction = transaction;
     this.authorize = authorize;
     this.statusResolver = statusResolver;
@@ -39,13 +48,32 @@ class AssignmentService {
 
   #memoryCreate({ principal, ...input }) {
     this.#requirePrincipal(principal);
-    const assignment = new Assignment(input);
+    const assignment = new Assignment({ ...input, organizationId: principal.organizationId });
     this.#authorize(principal, "assignment:create", assignment.organizationId);
     const key = this.#key(assignment.organizationId, assignment.id);
     if (this.assignmentStore.has(key)) throw new Error("Assignment ID already exists");
+    this.#assertMemoryReferences(principal, assignment);
     this.#assertResourceAvailable(assignment);
     this.assignmentStore.set(key, assignment);
     return this.#clone(assignment);
+  }
+
+  #assertMemoryReferences(principal, assignment) {
+    const organizationId = principal.organizationId;
+    const resource = this.resourceService.getForOrganization({ organizationId, resourceId: assignment.resourceId });
+    if (!resource || (resource.organizationId && resource.organizationId !== organizationId)) {
+      throw new Error("Resource not found");
+    }
+
+    if (assignment.jobId) {
+      const job = this.jobService.getForOrganization({ organizationId, jobId: assignment.jobId });
+      if (!job || job.organizationId !== organizationId) throw new Error("Job not found");
+    }
+
+    if (assignment.workOrderId) {
+      const workOrder = this.workOrderService.getForOrganization({ organizationId, workOrderId: assignment.workOrderId });
+      if (!workOrder || workOrder.organizationId !== organizationId) throw new Error("Work order not found");
+    }
   }
 
   #memoryGet({ principal, assignmentId }) {

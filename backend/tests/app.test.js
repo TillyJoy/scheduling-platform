@@ -326,7 +326,7 @@ test("resource endpoint returns only active resources in the authenticated organ
   }
 });
 
-test("development demo login can read the default demo resource", async () => {
+test("development demo login can use the authorized staff assignment workflow", async () => {
   const previousNodeEnv = process.env.NODE_ENV;
   process.env.NODE_ENV = "development";
   const authenticationService = new AuthenticationService({ secret: AUTH_SECRET });
@@ -337,11 +337,38 @@ test("development demo login can read the default demo resource", async () => {
     const login = await request(server, "POST", "/api/auth/dev-login", {});
     assert.equal(login.status, 200);
 
+    const context = await request(server, "GET", "/api/auth/me", null, {
+      Authorization: `Bearer ${login.body.token}`
+    });
+    assert.ok(context.body.permissions.includes("assignment:read"));
+    assert.ok(context.body.permissions.includes("assignment:create"));
+
     const resources = await request(server, "GET", "/api/resources", null, {
       Authorization: `Bearer ${login.body.token}`
     });
     assert.equal(resources.status, 200);
     assert.deepEqual(resources.body.map(resource => resource.id), ["auditor-1"]);
+
+    const assignments = await request(server, "GET", "/api/assignments", null, {
+      Authorization: `Bearer ${login.body.token}`
+    });
+    assert.equal(assignments.status, 200);
+    assert.deepEqual(assignments.body, []);
+
+    const created = await request(server, "POST", "/api/assignments", {
+      id: "development-assignment",
+      resourceId: "auditor-1",
+      jobId: "job-1",
+      startTime: "2035-04-05T09:00:00.000Z",
+      endTime: "2035-04-05T10:00:00.000Z"
+    }, { Authorization: `Bearer ${login.body.token}` });
+    assert.equal(created.status, 201);
+    assert.equal(created.body.organizationId, "demo-org");
+    assert.equal(created.body.id, "development-assignment");
+
+    const workflowAsset = await requestText(server, "GET", "/assignmentWorkflow.js");
+    assert.equal(workflowAsset.status, 200);
+    assert.match(workflowAsset.body, /Create assignment/);
   } finally {
     await new Promise(resolve => server.close(resolve));
     if (previousNodeEnv === undefined) delete process.env.NODE_ENV;

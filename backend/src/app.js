@@ -36,7 +36,8 @@ const FRONTEND_FILES = {
   "/": { file: "index.html", contentType: "text/html; charset=utf-8" },
   "/app.js": { file: "app.js", contentType: "text/javascript; charset=utf-8" },
   "/auth.js": { file: "auth.js", contentType: "text/javascript; charset=utf-8" },
-  "/appShell.js": { file: "appShell.js", contentType: "text/javascript; charset=utf-8" }
+  "/appShell.js": { file: "appShell.js", contentType: "text/javascript; charset=utf-8" },
+  "/assignmentWorkflow.js": { file: "assignmentWorkflow.js", contentType: "text/javascript; charset=utf-8" }
 };
 const FRONTEND_DIR = path.resolve(__dirname, "../../frontend/src");
 
@@ -251,7 +252,7 @@ function principal() {
   return {
     userId: "demo-user",
     organizationId: "demo-org",
-    permissions: ["job:create", "job:read", "workOrder:create", "workOrder:read", "resource:read", "appointment:create", "appointment:read", "appointment:update", "appointment:confirm", "appointment:cancel", "fieldVisit:create", "fieldVisit:read", "fieldVisit:update", "actualWork:create", "actualWork:read", "fieldExecution:sync"]
+    permissions: ["job:create", "job:read", "workOrder:create", "workOrder:read", "resource:read", "assignment:create", "assignment:read", "appointment:create", "appointment:read", "appointment:update", "appointment:confirm", "appointment:cancel", "fieldVisit:create", "fieldVisit:read", "fieldVisit:update", "actualWork:create", "actualWork:read", "fieldExecution:sync"]
   };
 }
 

@@ -4,7 +4,11 @@ async function api(path, options = {}) {
   const response = await SchedulingAuth.authenticatedFetch(path, options);
   let data = {};
   try { data = await response.json(); } catch { data = { error: "The server returned an invalid response." }; }
-  if (!response.ok) throw new Error(data.error || "Request failed");
+  if (!response.ok) {
+    const error = new Error(data.error || "Request failed");
+    error.status = response.status;
+    throw error;
+  }
   return data;
 }
 
@@ -27,6 +31,7 @@ function dateWindow(dateValue) {
 }
 
 let selectedJobId = null;
+let currentSession = null;
 
 async function load(dateValue = new Date().toISOString().slice(0,10), requestedJobId = selectedJobId) {
   const workspace = document.getElementById("workspace");
@@ -170,6 +175,174 @@ async function load(dateValue = new Date().toISOString().slice(0,10), requestedJ
   }
 }
 
+async function loadAssignmentWorkspace(session, options = {}) {
+  const workspace = document.getElementById("workspace");
+  if (!workspace) return;
+  const workflow = SchedulingAssignmentWorkflow;
+  const controller = workflow.createController(api);
+  const permissions = Array.isArray(session.permissions) ? session.permissions : [];
+  const canRead = permissions.includes("assignment:read");
+  workspace.innerHTML = '<section class="panel" aria-busy="true"><p>Loading assignments…</p></section>';
+
+  let assignments = [];
+  let jobs = [];
+  let resources = [];
+  let workOrders = [];
+  let canReadWorkOrders = false;
+  let selectedJobId = options.selectedJobId || "";
+  let selectedAssignment = null;
+  let listError = "";
+  let referenceError = "";
+  let detailError = "";
+  let createBlockedMessage = "";
+
+  if (canRead) {
+    try {
+      assignments = await controller.list(session);
+    } catch (error) {
+      if (error instanceof SchedulingAuth.AuthenticationError) throw error;
+      listError = workflow.errorMessage(error);
+    }
+  }
+
+  try {
+    const references = await controller.references(session);
+    if (references.available) {
+      jobs = references.jobs;
+      resources = references.resources;
+      canReadWorkOrders = references.canReadWorkOrders;
+      if (!jobs.some(job => job.id === selectedJobId)) selectedJobId = jobs[0]?.id || "";
+      if (selectedJobId && canReadWorkOrders) workOrders = await controller.workOrders(session, selectedJobId);
+    } else if (permissions.includes("assignment:create")) {
+      createBlockedMessage = `Assignment creation requires these additional permissions: ${references.missing.join(", ")}.`;
+    }
+  } catch (error) {
+    if (error instanceof SchedulingAuth.AuthenticationError) throw error;
+    referenceError = workflow.errorMessage(error);
+    createBlockedMessage = referenceError;
+  }
+
+  if (options.selectedAssignmentId && canRead) {
+    try {
+      selectedAssignment = await controller.get(session, options.selectedAssignmentId);
+    } catch (error) {
+      if (error instanceof SchedulingAuth.AuthenticationError) throw error;
+      detailError = workflow.errorMessage(error);
+    }
+  }
+
+  function render() {
+    workspace.innerHTML = workflow.renderWorkspace({
+      canRead,
+      assignments,
+      canCreate: !referenceError && jobs.length > 0 && resources.length > 0 && permissions.includes("assignment:create"),
+      createBlockedMessage,
+      jobs,
+      resources,
+      workOrders,
+      canReadWorkOrders,
+      selectedJobId,
+      selectedAssignment,
+      listError,
+      referenceError,
+      detailError,
+      notice: options.notice || ""
+    });
+
+    document.getElementById("refresh-assignments")?.addEventListener("click", () => {
+      void loadAssignmentWorkspace(session, { selectedJobId, selectedAssignmentId: selectedAssignment?.id });
+    });
+
+    document.getElementById("assignment-job")?.addEventListener("change", async event => {
+      selectedJobId = event.currentTarget.value;
+      referenceError = "";
+      try {
+        workOrders = selectedJobId ? await controller.workOrders(session, selectedJobId) : [];
+      } catch (error) {
+        if (error instanceof SchedulingAuth.AuthenticationError) {
+          bindUnauthenticated("Your session has expired. Sign in again.");
+          return;
+        }
+        referenceError = workflow.errorMessage(error);
+      }
+      render();
+    });
+
+    document.querySelectorAll(".assignment-detail").forEach(button => {
+      button.addEventListener("click", async () => {
+        try {
+          selectedAssignment = await controller.get(session, button.dataset.assignmentId);
+          detailError = "";
+        } catch (error) {
+          if (error instanceof SchedulingAuth.AuthenticationError) {
+            bindUnauthenticated("Your session has expired. Sign in again.");
+            return;
+          }
+          selectedAssignment = null;
+          detailError = workflow.errorMessage(error);
+        }
+        render();
+      });
+    });
+
+    document.getElementById("assignment-create-form")?.addEventListener("submit", async event => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const values = Object.fromEntries(new FormData(form).entries());
+      const feedback = document.getElementById("assignment-feedback");
+      form.querySelector('button[type="submit"]').disabled = true;
+      if (feedback) feedback.textContent = "Creating assignment…";
+      try {
+        const created = await controller.create(session, values);
+        await loadAssignmentWorkspace(session, {
+          selectedJobId,
+          selectedAssignmentId: created.id,
+          notice: "Assignment created successfully."
+        });
+      } catch (error) {
+        if (error instanceof SchedulingAuth.AuthenticationError) {
+          bindUnauthenticated("Your session has expired. Sign in again.");
+          return;
+        }
+        if (feedback) feedback.textContent = workflow.errorMessage(error);
+        form.querySelector('button[type="submit"]').disabled = false;
+      }
+    });
+  }
+
+  render();
+}
+
+async function routeCurrentView() {
+  if (!currentSession) return;
+  try {
+    if (window.location.hash === "#/assignments") {
+      await loadAssignmentWorkspace(currentSession);
+    } else {
+      await load();
+    }
+  } catch (error) {
+    if (error instanceof SchedulingAuth.AuthenticationError) {
+      bindUnauthenticated("Your session has expired. Sign in again.");
+      return;
+    }
+    SchedulingAppShell.renderError(root, error.message);
+    document.getElementById("retry-application")?.addEventListener("click", routeCurrentView);
+  }
+}
+
+function showAuthenticated(session) {
+  currentSession = session;
+  SchedulingAppShell.renderAuthenticated(root, session);
+  document.getElementById("logout")?.addEventListener("click", () => {
+    SchedulingAuth.logout();
+    currentSession = null;
+    bindUnauthenticated("You have been signed out.");
+  });
+  window.onhashchange = routeCurrentView;
+  return routeCurrentView();
+}
+
 window.SchedulingScheduler = Object.freeze({load});
 
 async function boot() {
@@ -177,12 +350,7 @@ async function boot() {
   try {
     const session = await SchedulingAuth.getSession();
     if (!session) { bindUnauthenticated(); return; }
-    SchedulingAppShell.renderAuthenticated(root, session);
-    document.getElementById("logout")?.addEventListener("click", () => {
-      SchedulingAuth.logout();
-      bindUnauthenticated("You have been signed out.");
-    });
-    await load();
+    await showAuthenticated(session);
   } catch (error) {
     if (error instanceof SchedulingAuth.AuthenticationError) {
       bindUnauthenticated("Your session has expired. Sign in again.");
@@ -194,18 +362,15 @@ async function boot() {
 }
 
 function bindUnauthenticated(message) {
+  currentSession = null;
+  window.onhashchange = null;
   SchedulingAppShell.renderUnauthenticated(root, message);
   document.getElementById("development-login")?.addEventListener("click", async event => {
     event.currentTarget.disabled = true;
     try {
       const session = await SchedulingAuth.developmentLogin();
       if (!session) throw new Error("Authentication did not establish a valid session.");
-      SchedulingAppShell.renderAuthenticated(root, session);
-      document.getElementById("logout")?.addEventListener("click", () => {
-        SchedulingAuth.logout();
-        bindUnauthenticated("You have been signed out.");
-      });
-      await load();
+      await showAuthenticated(session);
     } catch (error) {
       bindUnauthenticated(error.message);
     }

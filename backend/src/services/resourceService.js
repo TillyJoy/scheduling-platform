@@ -22,6 +22,16 @@ class ResourceService {
     return this.resourceRepository ? this.#durableGet(args) : this.#memoryGet(args);
   }
 
+  getForOrganization({ organizationId, resourceId, db = null } = {}) {
+    if (!organizationId || !resourceId) return null;
+    if (!this.resourceRepository) {
+      return this.resourceStore.get(ResourceService.storageKey(organizationId, resourceId)) ?? null;
+    }
+    const principal = { userId: "system", organizationId };
+    const read = database => this.resourceRepository.get({ principal, resourceId, db: database });
+    return db ? read(db) : this.transaction(principal, "resource.internal-read", read);
+  }
+
   list(args = {}) {
     return this.resourceRepository ? this.#durableList(args) : this.#memoryList(args);
   }

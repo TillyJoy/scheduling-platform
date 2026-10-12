@@ -136,6 +136,9 @@ function createAppState(seed = {}) {
     resourceRepository,
     jobRepository,
     workOrderRepository,
+    resourceService,
+    jobService,
+    workOrderService,
     transaction,
     statusResolver: assignmentStatusResolver
   });
@@ -314,6 +317,14 @@ function serializeActualWork(work) {
   };
 }
 
+function serializeAssignment(assignment) {
+  return {
+    ...assignment,
+    startTime: assignment.startTime.toISOString(),
+    endTime: assignment.endTime.toISOString()
+  };
+}
+
 function staticFile(res, fileConfig) {
   const filePath = path.resolve(FRONTEND_DIR, fileConfig.file);
   if (!filePath.startsWith(FRONTEND_DIR + path.sep)) {
@@ -461,6 +472,61 @@ function createHandler(state, {
           organizationId: p.organizationId
         });
         return json(res, 201, workOrder);
+      }
+      if (req.method === "GET" && path === "/api/assignments") {
+        const startTime = url.searchParams.get("startTime");
+        const endTime = url.searchParams.get("endTime");
+        for (const [name, value] of [["startTime", startTime], ["endTime", endTime]]) {
+          if (value && Number.isNaN(new Date(value).getTime())) {
+            return json(res, 400, { error: `${name} must be a valid date` });
+          }
+        }
+        const assignments = await state.assignmentService.list({
+          principal: p,
+          resourceId: url.searchParams.get("resourceId"),
+          startTime,
+          endTime
+        });
+        return json(res, 200, assignments.map(serializeAssignment));
+      }
+      if (req.method === "GET" && /^\/api\/assignments\/[^/]+$/.test(path)) {
+        const assignmentId = path.slice("/api/assignments/".length);
+        try {
+          const assignment = await state.assignmentService.get({ principal: p, assignmentId });
+          return json(res, 200, serializeAssignment(assignment));
+        } catch (error) {
+          if (error.message === "Assignment not found") error.statusCode ||= 404;
+          throw error;
+        }
+      }
+      if (req.method === "POST" && path === "/api/assignments") {
+        const input = await readBody(req);
+        if (!input || typeof input !== "object" || Array.isArray(input)) {
+          return json(res, 400, { error: "Request body must be a JSON object" });
+        }
+        if (input.organizationId && input.organizationId !== p.organizationId) {
+          return json(res, 403, { error: "Not authorized for the requested organization" });
+        }
+        try {
+          const assignment = await state.assignmentService.create({
+            ...input,
+            principal: p,
+            organizationId: p.organizationId
+          });
+          return json(res, 201, serializeAssignment(assignment));
+        } catch (error) {
+          if (["Assignment ID already exists", "Resource is already assigned to an overlapping assignment"].includes(error.message)) {
+            error.statusCode ||= 409;
+          } else if (["Resource not found", "Job not found", "Work order not found", "Assignment not found"].includes(error.message)) {
+            error.statusCode ||= 404;
+          } else if ([
+            "id is required", "resourceId is required", "jobId or workOrderId is required",
+            "startTime and endTime are required", "endTime must be after startTime", "metadata must be an object"
+          ].includes(error.message)) {
+            error.statusCode ||= 400;
+          }
+          throw error;
+        }
       }
       if (req.method === "GET" && path === "/api/resources") {
         const resources = await state.resourceService.list({ principal: p });

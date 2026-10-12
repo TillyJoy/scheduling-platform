@@ -186,8 +186,20 @@ class AssignmentService {
     this.#requirePrincipal(principal);
     this.#authorize(principal, "assignment:create", principal.organizationId);
     return this.transaction(principal, "assignment.create", async db => {
+      const hasExplicitStatusCode = Object.prototype.hasOwnProperty.call(input, "statusCode");
       let statusCode = input.statusCode;
-      if (!statusCode && this.statusConfigurationService?.repository) {
+      if (hasExplicitStatusCode) {
+        const configuredStatus = typeof statusCode === "string" && statusCode.trim()
+          ? await this.statusConfigurationService?.repository?.getStatus({
+            principal, entityType: "assignment", code: statusCode, db
+          })
+          : null;
+        if (!configuredStatus) {
+          const error = new Error("statusCode must be configured for this organization and entity type");
+          error.statusCode = 400;
+          throw error;
+        }
+      } else if (this.statusConfigurationService?.repository) {
         const configuredStatuses = await this.statusConfigurationService.repository.listStatuses({
           principal, entityType: "assignment", db
         });

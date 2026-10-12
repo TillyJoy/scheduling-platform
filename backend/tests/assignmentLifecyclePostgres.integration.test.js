@@ -101,7 +101,25 @@ test("durable assignment status lifecycle enforces configured transitions and at
   await statusConfigurationService.setTransitions({
     principal: principalA, entityType: "assignment", fromCode: "cancelled", toCodes: ["scheduled"]
   });
-  assert.equal((await statusConfigurationService.listStatuses({ principal: principalB, entityType: "assignment" })).length, 0);
+  await statusConfigurationService.createStatus({
+    principal: principalA,
+    id: `job-status-${suffix}`,
+    organizationId: orgA,
+    entityType: "job",
+    code: "job-active",
+    label: "Job active",
+    category: "active"
+  });
+  await statusConfigurationService.createStatus({
+    principal: principalB,
+    id: `private-status-${suffix}`,
+    organizationId: orgB,
+    entityType: "assignment",
+    code: "org-b-private",
+    label: "Organization B private status",
+    category: "active"
+  });
+  assert.equal((await statusConfigurationService.listStatuses({ principal: principalB, entityType: "assignment" })).length, 1);
 
   const assignment = await assignmentService.create({
     principal: principalA,
@@ -204,6 +222,46 @@ test("durable assignment status lifecycle enforces configured transitions and at
   const server = http.createServer(createHandler(appState, { allowDevelopmentBypass: false }));
   await new Promise(resolve => server.listen(0, resolve));
   try {
+    const postAssignment = payload => new Promise((resolve, reject) => {
+      const request = http.request({
+        hostname: "127.0.0.1", port: server.address().port,
+        method: "POST", path: "/api/assignments",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }
+      }, res => {
+        let data = "";
+        res.on("data", chunk => data += chunk);
+        res.on("end", () => resolve({ status: res.statusCode, body: JSON.parse(data) }));
+      });
+      request.on("error", reject);
+      request.end(JSON.stringify(payload));
+    });
+
+    for (const [id, invalidStatus] of [
+      [`invalid-status-${suffix}`, "not-configured"],
+      [`wrong-entity-status-${suffix}`, "job-active"],
+      [`cross-organization-status-${suffix}`, "org-b-private"]
+    ]) {
+      const response = await postAssignment({
+        id,
+        resourceId: `resource-${suffix}`,
+        jobId: `job-a-${suffix}`,
+        startTime: "2026-10-01T15:00:00Z",
+        endTime: "2026-10-01T16:00:00Z",
+        statusCode: invalidStatus
+      });
+      assert.equal(response.status, 400);
+      assert.deepEqual(response.body, {
+        error: "statusCode must be configured for this organization and entity type"
+      });
+      assert.equal(await assignmentRepository.get({ principal: principalA, assignmentId: id }), null);
+    }
+    const noPersistedInvalidStatuses = await pool.query(
+      `SELECT count(*)::int AS count FROM assignments
+       WHERE organization_id=$1 AND id = ANY($2::text[])`,
+      [orgA, ["invalid-status-" + suffix, "wrong-entity-status-" + suffix, "cross-organization-status-" + suffix]]
+    );
+    assert.equal(noPersistedInvalidStatuses.rows[0].count, 0);
+
     const response = await new Promise((resolve, reject) => {
       const request = http.request({
         hostname: "127.0.0.1", port: server.address().port,

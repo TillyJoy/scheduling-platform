@@ -42,7 +42,7 @@ test("identity service resolves only through the trusted repository and tenant c
   });
   assert.equal(external.userId, "mapped-user");
   assert.deepEqual(external.permissions, ["job:read"]);
-  assert.equal(calls[2].subject, "subject-123");
+  assert.equal(calls[3].subject, "subject-123");
 });
 
 test("identity service fails closed for incomplete identity and membership context", async () => {

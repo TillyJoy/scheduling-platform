@@ -294,6 +294,7 @@ async function ensureDurableDemoData(state) {
       "INSERT INTO membership_roles (organization_id, user_id, role_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
       ["demo-org", "demo-user", "demo-role"]
     );
+    await db.query("DELETE FROM role_permissions WHERE organization_id = $1 AND role_id = $2", ["demo-org", "demo-role"]);
     for (const permission of demoPrincipal.permissions) {
       await db.query(
         "INSERT INTO role_permissions (organization_id, role_id, permission_code) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
@@ -452,6 +453,7 @@ function createHandler(state, {
       }
 
       let p;
+      // The adapter must cryptographically verify the request (signature, issuer, audience, expiry) before returning provider/issuer/subject. The resulting identity is still not authorization: persisted membership and role permissions below are authoritative.
       if (identityProviderAdapter) {
         if (!state.identityService || typeof identityProviderAdapter.authenticateRequest !== "function") {
           const error = new Error("External identity authentication is not configured");

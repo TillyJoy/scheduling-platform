@@ -31,8 +31,14 @@ if (!process.env.DATABASE_URL || process.env.RUN_POSTGRES_TESTS !== "1") {
       try {
         for (const organizationId of [orgA, orgB]) {
           await withTransaction(pool, { organizationId, userId: "cleanup", action: "test.identity.cleanup" }, async db => {
-            await db.query("DELETE FROM external_identities WHERE user_id = $1", [userId]);
-            await db.query("DELETE FROM users WHERE id = $1", [userId]);
+            await db.query("DELETE FROM role_permissions WHERE organization_id = $1", [organizationId]);
+            await db.query("DELETE FROM membership_roles WHERE organization_id = $1", [organizationId]);
+            await db.query("DELETE FROM organization_roles WHERE organization_id = $1", [organizationId]);
+            await db.query("DELETE FROM organization_memberships WHERE organization_id = $1", [organizationId]);
+            if (organizationId === orgA) {
+              await db.query("DELETE FROM external_identities WHERE user_id = $1", [userId]);
+              await db.query("DELETE FROM users WHERE id IN ($1, $2)", [userId, unknownUserId]);
+            }
             await db.query("DELETE FROM organizations WHERE id = $1", [organizationId]);
           });
         }

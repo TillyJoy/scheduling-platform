@@ -89,8 +89,8 @@ test("database-backed development startup persists and scopes the demo resource"
       permissions: ["resource:read"]
     });
     const otherTenantResources = await request(first.server, "GET", "/api/resources", otherTenantToken);
-    assert.equal(otherTenantResources.status, 200);
-    assert.deepEqual(otherTenantResources.body, []);
+    assert.equal(otherTenantResources.status, 401);
+    assert.deepEqual(otherTenantResources.body, { error: "Authentication required" });
 
     const second = await start();
     started.push(second);

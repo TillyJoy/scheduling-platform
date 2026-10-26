@@ -23,6 +23,21 @@ The database must support multiple organizations with isolated data.
 - integrations
 - audit_events
 
+## Platform Identity and Organization Access
+
+Authentication accounts are stored in `users`, separately from domain `Person` records.
+
+- `users`: platform account status and stable user identifier.
+- `external_identities`: provider + issuer + subject mapping to one platform User; external identifiers are not organization authorization.
+- `organization_memberships`: active/inactive/suspended User access to an Organization.
+- `organization_roles`: organization-owned configurable roles.
+- `membership_roles`: role assignments constrained to the same organization and membership.
+- `role_permissions`: action-oriented permission codes granted by an organization role.
+
+The API resolves a verified identity to a persisted active User and active Organization Membership. Effective permissions are loaded from active role assignments and role-permission records; caller-supplied organization, role, and permission claims are not authoritative. Membership, role, role assignment, and permission tables enforce tenant isolation through row-level security and transaction-scoped organization context.
+
+Clerk or another identity provider must remain an adapter outside the domain model. A provider/issuer/subject tuple must be verified before using it to resolve a platform User.
+
 ## Relationships
 
 An organization may have many:

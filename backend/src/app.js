@@ -30,6 +30,8 @@ const { AvailabilityService } = require("./services/availabilityService");
 const { StatusConfigurationService } = require("./services/statusConfigurationService");
 const { AssignmentService } = require("./services/assignmentService");
 const { withTransaction } = require("./database");
+const { IdentityRepository } = require("./repositories/identityRepository");
+const { IdentityService } = require("./services/identityService");
 
 const MAX_BODY_BYTES = 1024 * 1024;
 const FRONTEND_FILES = {

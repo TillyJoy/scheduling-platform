@@ -60,7 +60,7 @@ test("identity service fails closed for incomplete identity and membership conte
   assert.equal(await service.resolvePrincipal({ userId: "unknown", organizationId: "org-a" }), null);
   assert.equal(await service.resolvePrincipal({ userId: "known" }), null);
   assert.equal(await service.resolveExternalIdentity({ provider: "clerk", issuer: "issuer", subject: "unknown", organizationId: "org-a" }), null);
-  assert.equal(transactionCalls, 1);
+  assert.equal(transactionCalls, 2);
 });
 
 test("identity repository uses exact external identity tuple and derives permissions from active roles", async () => {

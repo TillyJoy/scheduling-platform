@@ -82,14 +82,14 @@ function createAppState(seed = {}) {
   const domainEventService = new DomainEventService({ eventStore: domainEvents, auditStore: auditEvents });
   const databasePool = seed.databasePool || null;
   const identityRepository = databasePool ? new IdentityRepository({ pool: databasePool }) : null;
-  const identityService = databasePool ? new IdentityService({
+  const identityService = seed.identityService || (databasePool ? new IdentityService({
     identityRepository,
     transaction: (p, action, work) => withTransaction(databasePool, {
       organizationId: p.organizationId,
       userId: p.userId,
       action
     }, work)
-  }) : null;
+  }) : null);
   const statusConfigurationService = seed.statusConfigurationService || new StatusConfigurationService({
     statusStore: seed.statusStore || new Map(),
     auditStore: auditEvents
@@ -251,6 +251,7 @@ function createAppState(seed = {}) {
     appointmentService,
     authenticationService: seed.authenticationService || null,
     identityService,
+    identityProviderAdapter: seed.identityProviderAdapter || null,
     databasePool,
     transaction
   };
@@ -418,6 +419,7 @@ function ensureDemoAvailability(state, startTime) {
 
 function createHandler(state, {
   authenticationService = state.authenticationService,
+  identityProviderAdapter = state.identityProviderAdapter,
   allowDevelopmentBypass =
     process.env.NODE_ENV === "development" &&
     process.env.ALLOW_DEVELOPMENT_AUTH_BYPASS === "true"
@@ -450,7 +452,28 @@ function createHandler(state, {
       }
 
       let p;
-      if (allowDevelopmentBypass) {
+      if (identityProviderAdapter) {
+        if (!state.identityService || typeof identityProviderAdapter.authenticateRequest !== "function") {
+          const error = new Error("External identity authentication is not configured");
+          error.statusCode = 503;
+          throw error;
+        }
+        const verifiedIdentity = await identityProviderAdapter.authenticateRequest(req);
+        if (!verifiedIdentity?.provider || !verifiedIdentity?.issuer || !verifiedIdentity?.subject || !verifiedIdentity?.organizationId) {
+          const error = new Error("Authentication required");
+          error.statusCode = 401;
+          throw error;
+        }
+        const resolvedPrincipal = await state.identityService.resolveExternalIdentity(verifiedIdentity);
+        if (!resolvedPrincipal) {
+          const error = new Error("Authentication required");
+          error.statusCode = 401;
+          throw error;
+        }
+        p = { ...resolvedPrincipal, authenticatedAt: verifiedIdentity.authenticatedAt || null,
+          expiresAt: verifiedIdentity.expiresAt || null, sessionId: verifiedIdentity.sessionId || null,
+          authMethod: verifiedIdentity.authMethod || verifiedIdentity.provider };
+      } else if (allowDevelopmentBypass) {
         p = principal();
       } else {
         if (process.env.NODE_ENV === "production" && !state.identityService) {
@@ -464,19 +487,19 @@ function createHandler(state, {
           throw error;
         }
         p = authenticationService.authenticateAuthorizationHeader(req.headers.authorization);
-      }
-      if (state.identityService) {
-        const resolvedPrincipal = await state.identityService.resolvePrincipal({
-          userId: p.userId,
-          organizationId: p.organizationId
-        });
-        if (!resolvedPrincipal) {
-          const error = new Error("Authentication required");
-          error.statusCode = 401;
-          throw error;
+        if (state.identityService) {
+          const resolvedPrincipal = await state.identityService.resolvePrincipal({
+            userId: p.userId,
+            organizationId: p.organizationId
+          });
+          if (!resolvedPrincipal) {
+            const error = new Error("Authentication required");
+            error.statusCode = 401;
+            throw error;
+          }
+          p = { ...resolvedPrincipal, authenticatedAt: p.authenticatedAt, expiresAt: p.expiresAt,
+            sessionId: p.sessionId, authMethod: p.authMethod || resolvedPrincipal.authMethod };
         }
-        p = { ...resolvedPrincipal, authenticatedAt: p.authenticatedAt, expiresAt: p.expiresAt,
-          sessionId: p.sessionId, authMethod: p.authMethod || resolvedPrincipal.authMethod };
       }
 
       if (req.method === "GET" && path === "/api/auth/me") {

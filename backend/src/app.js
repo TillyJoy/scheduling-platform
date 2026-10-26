@@ -30,6 +30,8 @@ const { AvailabilityService } = require("./services/availabilityService");
 const { StatusConfigurationService } = require("./services/statusConfigurationService");
 const { AssignmentService } = require("./services/assignmentService");
 const { withTransaction } = require("./database");
+const { IdentityRepository } = require("./repositories/identityRepository");
+const { IdentityService } = require("./services/identityService");
 
 const MAX_BODY_BYTES = 1024 * 1024;
 const FRONTEND_FILES = {
@@ -79,6 +81,15 @@ function createAppState(seed = {}) {
   const workOrderStore = new Map(workOrders.map(order => [JSON.stringify([order.organizationId, order.id]), order]));
   const domainEventService = new DomainEventService({ eventStore: domainEvents, auditStore: auditEvents });
   const databasePool = seed.databasePool || null;
+  const identityRepository = databasePool ? new IdentityRepository({ pool: databasePool }) : null;
+  const identityService = seed.identityService || (databasePool ? new IdentityService({
+    identityRepository,
+    transaction: (p, action, work) => withTransaction(databasePool, {
+      organizationId: p.organizationId,
+      userId: p.userId,
+      action
+    }, work)
+  }) : null);
   const statusConfigurationService = seed.statusConfigurationService || new StatusConfigurationService({
     statusStore: seed.statusStore || new Map(),
     auditStore: auditEvents
@@ -239,6 +250,8 @@ function createAppState(seed = {}) {
     appointmentStatusResolver,
     appointmentService,
     authenticationService: seed.authenticationService || null,
+    identityService,
+    identityProviderAdapter: seed.identityProviderAdapter || null,
     databasePool,
     transaction
   };
@@ -265,6 +278,29 @@ async function ensureDurableDemoData(state) {
        VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING`,
       ["client-1", "demo-org", "Demo", "Client"]
     );
+    await db.query(
+      "INSERT INTO users (id, status) VALUES ($1, 'active') ON CONFLICT (id) DO UPDATE SET status = 'active', updated_at = now()",
+      ["demo-user"]
+    );
+    await db.query(
+      "INSERT INTO organization_memberships (organization_id, user_id, status) VALUES ($1, $2, 'active') ON CONFLICT (organization_id, user_id) DO UPDATE SET status = 'active', updated_at = now()",
+      ["demo-org", "demo-user"]
+    );
+    await db.query(
+      "INSERT INTO organization_roles (organization_id, id, name, status) VALUES ($1, $2, $3, 'active') ON CONFLICT (organization_id, id) DO UPDATE SET name = EXCLUDED.name, status = 'active', updated_at = now()",
+      ["demo-org", "demo-role", "Development Demo"]
+    );
+    await db.query(
+      "INSERT INTO membership_roles (organization_id, user_id, role_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
+      ["demo-org", "demo-user", "demo-role"]
+    );
+    await db.query("DELETE FROM role_permissions WHERE organization_id = $1 AND role_id = $2", ["demo-org", "demo-role"]);
+    for (const permission of demoPrincipal.permissions) {
+      await db.query(
+        "INSERT INTO role_permissions (organization_id, role_id, permission_code) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
+        ["demo-org", "demo-role", permission]
+      );
+    }
   });
   const demoResources = await state.resourceService.list({ principal: demoPrincipal });
   if (!demoResources.some(resource => resource.id === "auditor-1")) {
@@ -384,6 +420,7 @@ function ensureDemoAvailability(state, startTime) {
 
 function createHandler(state, {
   authenticationService = state.authenticationService,
+  identityProviderAdapter = state.identityProviderAdapter,
   allowDevelopmentBypass =
     process.env.NODE_ENV === "development" &&
     process.env.ALLOW_DEVELOPMENT_AUTH_BYPASS === "true"
@@ -416,15 +453,55 @@ function createHandler(state, {
       }
 
       let p;
-      if (allowDevelopmentBypass) {
+      // The adapter must cryptographically verify the request (signature, issuer, audience, expiry) before returning provider/issuer/subject. The resulting identity is still not authorization: persisted membership and role permissions below are authoritative.
+      if (identityProviderAdapter) {
+        if (!state.identityService || typeof identityProviderAdapter.authenticateRequest !== "function") {
+          const error = new Error("External identity authentication is not configured");
+          error.statusCode = 503;
+          throw error;
+        }
+        const verifiedIdentity = await identityProviderAdapter.authenticateRequest(req);
+        if (!verifiedIdentity?.provider || !verifiedIdentity?.issuer || !verifiedIdentity?.subject || !verifiedIdentity?.organizationId) {
+          const error = new Error("Authentication required");
+          error.statusCode = 401;
+          throw error;
+        }
+        const resolvedPrincipal = await state.identityService.resolveExternalIdentity(verifiedIdentity);
+        if (!resolvedPrincipal) {
+          const error = new Error("Authentication required");
+          error.statusCode = 401;
+          throw error;
+        }
+        p = { ...resolvedPrincipal, authenticatedAt: verifiedIdentity.authenticatedAt || null,
+          expiresAt: verifiedIdentity.expiresAt || null, sessionId: verifiedIdentity.sessionId || null,
+          authMethod: verifiedIdentity.authMethod || verifiedIdentity.provider };
+      } else if (allowDevelopmentBypass) {
         p = principal();
       } else {
+        if (process.env.NODE_ENV === "production" && !state.identityService) {
+          const error = new Error("Identity persistence is not configured");
+          error.statusCode = 503;
+          throw error;
+        }
         if (!(authenticationService instanceof AuthenticationService)) {
           const error = new Error("Authentication is not configured");
           error.statusCode = 500;
           throw error;
         }
         p = authenticationService.authenticateAuthorizationHeader(req.headers.authorization);
+        if (state.identityService) {
+          const resolvedPrincipal = await state.identityService.resolvePrincipal({
+            userId: p.userId,
+            organizationId: p.organizationId
+          });
+          if (!resolvedPrincipal) {
+            const error = new Error("Authentication required");
+            error.statusCode = 401;
+            throw error;
+          }
+          p = { ...resolvedPrincipal, authenticatedAt: p.authenticatedAt, expiresAt: p.expiresAt,
+            sessionId: p.sessionId, authMethod: p.authMethod || resolvedPrincipal.authMethod };
+        }
       }
 
       if (req.method === "GET" && path === "/api/auth/me") {

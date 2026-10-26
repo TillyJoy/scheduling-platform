@@ -610,3 +610,56 @@ test("field execution API enforces tenant and permission boundaries", async () =
     await new Promise(resolve => server.close(resolve));
   }
 });
+
+
+test("replaceable identity provider adapter resolves verified external subject to server membership and permissions", async () => {
+  const state = createAppState({
+    identityService: {
+      async resolveExternalIdentity(identity) {
+        assert.equal(identity.provider, "test-provider");
+        assert.equal(identity.issuer, "https://issuer.test.invalid");
+        assert.equal(identity.subject, "subject-1");
+        if (identity.organizationId !== "org-a") return null;
+        return {
+          userId: "platform-user-1",
+          organizationId: "org-a",
+          permissions: ["resource:read"]
+        };
+      }
+    },
+    identityProviderAdapter: {
+      async authenticateRequest(req) {
+        assert.equal(req.headers.authorization, "Bearer provider-token");
+        return {
+          provider: "test-provider",
+          issuer: "https://issuer.test.invalid",
+          subject: "subject-1",
+          organizationId: "org-a",
+          permissions: ["organization:update"],
+          authMethod: "test-provider"
+        };
+      }
+    }
+  });
+  const server = http.createServer(createHandler(state, { allowDevelopmentBypass: false }));
+  await new Promise(resolve => server.listen(0, resolve));
+  try {
+    const context = await request(server, "GET", "/api/auth/me", null, {
+      Authorization: "Bearer provider-token"
+    });
+    assert.equal(context.status, 200);
+    assert.equal(context.body.userId, "platform-user-1");
+    assert.equal(context.body.organizationId, "org-a");
+    assert.deepEqual(context.body.permissions, ["resource:read"]);
+    assert.equal(context.body.permissions.includes("organization:update"), false);
+
+    const denied = await request(server, "GET", "/api/resources", null, {
+      Authorization: "Bearer provider-token",
+      "X-Organization-Id": "org-b"
+    });
+    assert.equal(denied.status, 200);
+    assert.deepEqual(denied.body, []);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});

@@ -75,3 +75,18 @@ test("persistence migration contains tenant RLS and replay-safe storage constrai
   assert.match(sql, /UNIQUE \(organization_id, event_id\)/);
   assert.match(sql, /audit events are append-only/);
 });
+
+
+test("identity migration establishes durable provider-neutral identity and tenant-scoped membership permissions", () => {
+  const sql = fs.readFileSync(path.join(__dirname, "../migrations/009_identity_foundation.sql"), "utf8");
+  for (const table of ["organization_memberships", "organization_roles", "membership_roles", "role_permissions"]) {
+    assert.match(sql, new RegExp(`ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY`));
+    assert.match(sql, new RegExp(`ALTER TABLE ${table} FORCE ROW LEVEL SECURITY`));
+    assert.match(sql, new RegExp(`CREATE POLICY ${table}_tenant_isolation`));
+  }
+  assert.match(sql, /PRIMARY KEY \(provider, issuer, subject\)/);
+  assert.match(sql, /PRIMARY KEY \(organization_id, user_id\)/);
+  assert.match(sql, /FOREIGN KEY \(organization_id, user_id\)/);
+  assert.match(sql, /FOREIGN KEY \(organization_id, role_id\)/);
+  assert.match(sql, /CHECK \(status IN \('active', 'inactive', 'suspended'\)\)/);
+});

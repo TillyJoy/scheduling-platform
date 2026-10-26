@@ -608,3 +608,42 @@ Authorized administrators should be able to configure:
 The integration architecture should allow other platforms to be connected using the same general model.
 
 Monday.com must be an integration, not a dependency of the core Scheduling Engine.
+
+## Initial Developer-Account Discovery Record
+
+**Record type:** Initial read-only discovery, not a completed integration or a finalized architecture decision.  
+**Environment:** The connected private/free Monday.com developer account only. The workplace Monday.com account is outside this inspection and must not be accessed through this workflow.
+
+### Boards inspected
+
+- [Scheduling Platform - Central Vetting DEV](https://developer-account-gang.monday.com/boards/18432152707)
+- [Mirror board](https://developer-account-gang.monday.com/boards/18432153904)
+
+The read-only inspection found people, status, date, dropdown, location, number, text, email, phone, long-text, and connected-board column types. Connected-board relationships exist between the two scheduling boards. No actual mirror-type or formula columns were found on those two boards. A file column was found on the welcome board. No automations were identified on the three boards inspected.
+
+These are observations about the inspected developer-account boards only. They do not establish which column types, automations, or workflows are used in the workplace account.
+
+### Integration capabilities to accommodate
+
+Where supported by the provider and selected configuration, the integration should account for:
+
+- Connected-board relationships, linked records, mirror columns, formula/calculated values, and file/document associations.
+- Configurable field and status mappings, synchronization direction, per-field authority, conflict handling, retries, duplicate prevention, audit history, and unsupported-column reporting.
+- A provider-neutral integration model that can later support Salesforce or other systems without introducing Monday.com-specific column types into the core domain model.
+
+This list records requirements for future design and implementation; it does not assert that these capabilities are already implemented or verified.
+
+### Open questions
+
+1. Which mirror, formula, file, automation, and other column types are used in the actual workplace account?
+2. Which system is authoritative for each synchronized field?
+3. Which values should the platform calculate, and which should remain calculated in Monday.com?
+4. What attachment access, permission, retention, and download requirements apply?
+5. Which integration capabilities are required for the first usable MVP versus later increments?
+
+### Governance and implementation status
+
+The existing architecture remains unchanged: Monday.com is an optional external integration at the platform level, while a particular deployment may depend on it for its configured workflow. The platform retains its own domain model and remains capable of operating independently.
+
+This discovery record does not resolve the open questions above, change synchronization architecture, authorize access to workplace client data, or mark any integration capability complete. Reconcile the open questions and MVP priorities with the project's existing governance records; do not create parallel trackers or decision registers.
+

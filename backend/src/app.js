@@ -277,6 +277,28 @@ async function ensureDurableDemoData(state) {
        VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING`,
       ["client-1", "demo-org", "Demo", "Client"]
     );
+    await db.query(
+      "INSERT INTO users (id, status) VALUES ($1, 'active') ON CONFLICT (id) DO UPDATE SET status = 'active', updated_at = now()",
+      ["demo-user"]
+    );
+    await db.query(
+      "INSERT INTO organization_memberships (organization_id, user_id, status) VALUES ($1, $2, 'active') ON CONFLICT (organization_id, user_id) DO UPDATE SET status = 'active', updated_at = now()",
+      ["demo-org", "demo-user"]
+    );
+    await db.query(
+      "INSERT INTO organization_roles (organization_id, id, name, status) VALUES ($1, $2, $3, 'active') ON CONFLICT (organization_id, id) DO UPDATE SET name = EXCLUDED.name, status = 'active', updated_at = now()",
+      ["demo-org", "demo-role", "Development Demo"]
+    );
+    await db.query(
+      "INSERT INTO membership_roles (organization_id, user_id, role_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
+      ["demo-org", "demo-user", "demo-role"]
+    );
+    for (const permission of demoPrincipal.permissions) {
+      await db.query(
+        "INSERT INTO role_permissions (organization_id, role_id, permission_code) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
+        ["demo-org", "demo-role", permission]
+      );
+    }
   });
   const demoResources = await state.resourceService.list({ principal: demoPrincipal });
   if (!demoResources.some(resource => resource.id === "auditor-1")) {

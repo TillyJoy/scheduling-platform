@@ -453,12 +453,30 @@ function createHandler(state, {
       if (allowDevelopmentBypass) {
         p = principal();
       } else {
+        if (process.env.NODE_ENV === "production" && !state.identityService) {
+          const error = new Error("Identity persistence is not configured");
+          error.statusCode = 503;
+          throw error;
+        }
         if (!(authenticationService instanceof AuthenticationService)) {
           const error = new Error("Authentication is not configured");
           error.statusCode = 500;
           throw error;
         }
         p = authenticationService.authenticateAuthorizationHeader(req.headers.authorization);
+      }
+      if (state.identityService) {
+        const resolvedPrincipal = await state.identityService.resolvePrincipal({
+          userId: p.userId,
+          organizationId: p.organizationId
+        });
+        if (!resolvedPrincipal) {
+          const error = new Error("Authentication required");
+          error.statusCode = 401;
+          throw error;
+        }
+        p = { ...resolvedPrincipal, authenticatedAt: p.authenticatedAt, expiresAt: p.expiresAt,
+          sessionId: p.sessionId, authMethod: p.authMethod || resolvedPrincipal.authMethod };
       }
 
       if (req.method === "GET" && path === "/api/auth/me") {

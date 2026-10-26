@@ -81,6 +81,15 @@ function createAppState(seed = {}) {
   const workOrderStore = new Map(workOrders.map(order => [JSON.stringify([order.organizationId, order.id]), order]));
   const domainEventService = new DomainEventService({ eventStore: domainEvents, auditStore: auditEvents });
   const databasePool = seed.databasePool || null;
+  const identityRepository = databasePool ? new IdentityRepository({ pool: databasePool }) : null;
+  const identityService = databasePool ? new IdentityService({
+    identityRepository,
+    transaction: (p, action, work) => withTransaction(databasePool, {
+      organizationId: p.organizationId,
+      userId: p.userId,
+      action
+    }, work)
+  }) : null;
   const statusConfigurationService = seed.statusConfigurationService || new StatusConfigurationService({
     statusStore: seed.statusStore || new Map(),
     auditStore: auditEvents
@@ -241,6 +250,7 @@ function createAppState(seed = {}) {
     appointmentStatusResolver,
     appointmentService,
     authenticationService: seed.authenticationService || null,
+    identityService,
     databasePool,
     transaction
   };
